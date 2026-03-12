@@ -363,13 +363,6 @@ const ACTIVE_VOICE_GROUPS = [
   },
 ];
 
-function getSmoothnessLabel(value) {
-  if (value < 30) return "Natural";
-  if (value < 60) return "Soft";
-  if (value < 80) return "Smooth";
-  return "Ultra Smooth";
-}
-
 function getSmoothnessInstruction(value) {
   if (value < 30) return "Keep the delivery natural and realistic.";
   if (value < 60) return "Keep the delivery natural with softer consonants and gentler transitions.";
@@ -554,7 +547,7 @@ export default function App() {
   const [selectedMusic, setSelectedMusic] = useState(MUSIC_GENRES[0]);
   const [musicVolume, setMusicVolume] = useState(30);
   const [voiceSpeed, setVoiceSpeed] = useState(1.0);
-  const [voiceSmoothness, setVoiceSmoothness] = useState(72);
+  const [voiceSmoothness] = useState(72);
   const [generating, setGenerating] = useState(false);
   const [genProgress, setGenProgress] = useState(0);
   const [genStage, setGenStage] = useState("");
@@ -707,7 +700,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
 
   const connectSmoothedAudio = useCallback(async (audio) => {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextCtor) return () => {};
+    if (!AudioContextCtor) return () => { };
 
     const ctx = audioContextRef.current || new AudioContextCtor();
     audioContextRef.current = ctx;
@@ -740,11 +733,11 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
     wetGain.connect(ctx.destination);
 
     return () => {
-      try { source.disconnect(); } catch {}
-      try { dryGain.disconnect(); } catch {}
-      try { lowpass.disconnect(); } catch {}
-      try { compressor.disconnect(); } catch {}
-      try { wetGain.disconnect(); } catch {}
+      try { source.disconnect(); } catch { /* ignore */ }
+      try { dryGain.disconnect(); } catch { /* ignore */ }
+      try { lowpass.disconnect(); } catch { /* ignore */ }
+      try { compressor.disconnect(); } catch { /* ignore */ }
+      try { wetGain.disconnect(); } catch { /* ignore */ }
     };
   }, [voiceSmoothness]);
 
@@ -880,8 +873,68 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       backgroundSize: "40px 40px",
     },
     container: {
-      maxWidth: 980, margin: "0 auto", padding: "0 20px 60px",
+      maxWidth: 1080, margin: "0 auto", padding: "0 20px 60px",
       position: "relative", zIndex: 1,
+    },
+    modernHeader: {
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: "30px 40px", borderRadius: 24, background: "rgba(8,10,24,0.7)",
+      border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 35px 120px rgba(15,23,42,0.45)",
+      marginBottom: 24, backdropFilter: "blur(20px)",
+    },
+    headerBadge: {
+      fontSize: 13, letterSpacing: 1.2, textTransform: "uppercase",
+      padding: "6px 16px", borderRadius: 999,
+      border: "1px solid rgba(124,58,237,0.6)", color: "#d1d5db",
+    },
+    navButtonsRow: {
+      display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap",
+    },
+    featureRow: {
+      display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18,
+    },
+    featureBadge: {
+      display: "flex", alignItems: "center", gap: 6,
+      padding: "8px 14px", borderRadius: 18,
+      background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+      fontSize: 13, color: "#94a3b8",
+    },
+    navButton: (active) => ({
+      padding: "10px 16px", borderRadius: 18, border: "none", cursor: "pointer",
+      fontWeight: 600, fontSize: 13, letterSpacing: 0.4,
+      color: active ? "#fff" : "#94a3b8",
+      background: active ? "linear-gradient(135deg, #7c3aed, #4f46e5)" : "rgba(255,255,255,0.04)",
+      boxShadow: active ? "0 10px 25px rgba(124,58,237,0.35)" : "none",
+      transition: "all 0.2s",
+    }),
+    bodyGrid: {
+      display: "grid", gridTemplateColumns: "280px 1fr", gap: 24, alignItems: "start",
+    },
+    sidebar: {
+      background: "rgba(15,23,42,0.8)", borderRadius: 22, padding: 24,
+      border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 20px 60px rgba(15,23,42,0.45)",
+    },
+    sidebarTitle: {
+      fontSize: 14, color: "#94a3b8", letterSpacing: 0.5, textTransform: "uppercase",
+      marginBottom: 10,
+    },
+    sidebarNav: {
+      display: "flex", flexDirection: "column", gap: 14, marginBottom: 18,
+    },
+    sidebarNavItem: (active) => ({
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: "12px 14px", borderRadius: 16, cursor: "pointer", background: active ? "rgba(124,58,237,0.18)" : "rgba(255,255,255,0.03)",
+      border: active ? "1px solid rgba(124,58,237,0.6)" : "1px solid transparent",
+      transition: "all 0.2s",
+    }),
+    sidebarStat: {
+      display: "flex", justifyContent: "space-between", marginTop: 10,
+      fontSize: 13, color: "#94a3b8",
+    },
+    smoothCard: {
+      marginTop: 18, padding: 16, borderRadius: 18,
+      background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(124,58,237,0.1))",
+      border: "1px solid rgba(255,255,255,0.1)",
     },
     header: {
       padding: "40px 0 32px",
@@ -1792,7 +1845,6 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                         {[
                           { label: "Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}×` },
-                          { label: "Pitch", val: voicePitch, set: setVoicePitch, min: -5, max: 5, step: 0.5, display: voicePitch > 0 ? `+${voicePitch}` : `${voicePitch}` },
                         ].map(({ label, val, set, min, max, step, display }) => (
                           <div key={label}>
                             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -2052,7 +2104,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                   setGenerated(false); setStep(0);
                   setImage(null); setImageUrl(null); setScript("");
                   setSpeaking(false); setPreviewActive(false);
-                  setSelectedVoice(VOICES[0]); setVoiceSpeed(1.0); setVoicePitch(0);
+                  setSelectedVoice(VOICES[0]); setVoiceSpeed(1.0);
                   setEditingSection(null); setTtsCache({});
                 }}
               >🔄 Start New Video</button>
