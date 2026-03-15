@@ -440,6 +440,9 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [image, setImage] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [lipSyncVideoUrl, setLipSyncVideoUrl] = useState(null);
+  const [lipSyncLoading, setLipSyncLoading] = useState(false);
   const [script, setScript] = useState("");
   const [selectedVoice, setSelectedVoice] = useState(ACTIVE_VOICES[0]);
   const [selectedEmotion, setSelectedEmotion] = useState("Neutral");
@@ -556,6 +559,30 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
     return data.audioUrl;
   }, [ttsCache, selectedEmotion, voiceSmoothness]);
 
+  const runLipsync = useCallback(async (audioDataUrl) => {
+    if (!videoUrl.trim()) return;
+    setLipSyncLoading(true);
+    try {
+      const res = await fetch("/api/lipsync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioDataUrl,
+          videoUrl: videoUrl.trim(),
+          syncMode: "cut_off",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Lipsync API ${res.status}`);
+      setLipSyncVideoUrl(data.videoUrl);
+      setGenerated(true);
+    } catch (err) {
+      setVoiceError(err.message || "Lip sync failed.");
+    } finally {
+      setLipSyncLoading(false);
+    }
+  }, [videoUrl]);
+
   const connectSmoothedAudio = useCallback(async (audio) => {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) return () => { };
@@ -626,6 +653,7 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
     setTtsLoading(true);
     setPreviewActive(true);
     setSpeaking(true);
+    setLipSyncVideoUrl(null);
 
     try {
       const audioUrl = await callOpenTTS(text, voice);
@@ -648,6 +676,7 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
       audio.onended = cleanup;
       audio.onerror = cleanup;
       await audio.play();
+      runLipsync(audioUrl);
     } catch (err) {
       console.error("TTS error:", err);
       setPreviewActive(false);
@@ -656,9 +685,10 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
     } finally {
       setTtsLoading(false);
     }
-  }, [previewActive, script, selectedVoice, voiceSpeed, callOpenTTS, connectSmoothedAudio, stopAudio]);
+  }, [previewActive, script, selectedVoice, voiceSpeed, callOpenTTS, connectSmoothedAudio, stopAudio, runLipsync]);
 
   useEffect(() => { setCharCount(script.length); }, [script]);
+  useEffect(() => { setLipSyncVideoUrl(null); }, [videoUrl, script, selectedVoice]);
 
   const handleImageUpload = (file) => {
     if (!file) return;
@@ -680,6 +710,13 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
   const handleGenerate = async () => {
     setGenerating(true);
     setGenProgress(0);
+    setLipSyncVideoUrl(null);
+    try {
+      const audioUrl = await callOpenTTS(script, selectedVoice);
+      await runLipsync(audioUrl);
+    } catch (err) {
+      setVoiceError(err.message || "Generation failed.");
+    }
     const stages = [
       { label: "Analyzing face structure...", duration: 1200 },
       { label: "Cloning voice from model...", duration: 1500 },
@@ -705,7 +742,7 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
   };
 
   const canProceed = [
-    !!imageUrl,
+    videoUrl.trim().length > 0,
     script.trim().length > 10,
     true,
     true,
@@ -908,55 +945,28 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
   // STEP 0: Upload
   const renderUpload = () => (
     <div style={styles.card}>
-      <div style={styles.sectionTitle}>Upload Your Photo</div>
-      <div style={styles.sectionSub}>Upload a clear front-facing portrait for best lip sync results</div>
-
-      <div
-        style={styles.dropzone(dragOver)}
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-      >
-        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
-          onChange={e => handleImageUpload(e.target.files[0])} />
-        {imageUrl ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-            <img src={imageUrl} alt="Uploaded" style={{
-              width: 160, height: 160, borderRadius: "50%", objectFit: "cover",
-              border: "3px solid rgba(167,139,250,0.5)",
-              boxShadow: "0 0 30px rgba(124,58,237,0.3)",
-            }} />
-            <div style={{ color: "#a78bfa", fontWeight: 700 }}>âœ“ Photo uploaded successfully</div>
-            <div style={{ color: "#64748b", fontSize: 13 }}>Click to replace</div>
-          </div>
-        ) : (
-          <>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>ðŸ“¸</div>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Drop your photo here</div>
-            <div style={{ color: "#64748b", fontSize: 14, marginBottom: 16 }}>or click to browse</div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              {["JPG", "PNG", "WEBP", "HEIC"].map(f => (
-                <span key={f} style={styles.tag}>{f}</span>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {imageUrl && (
-        <div style={{
-          marginTop: 20, padding: "16px 20px", borderRadius: 12,
-          background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)",
-          display: "flex", alignItems: "center", gap: 12,
-        }}>
-          <span style={{ fontSize: 18 }}>âœ…</span>
-          <div>
-            <div style={{ fontWeight: 700, color: "#34d399", fontSize: 14 }}>Face Detection Ready</div>
-            <div style={{ color: "#64748b", fontSize: 12 }}>68 facial landmarks mapped Â· Lip region extracted</div>
-          </div>
+      <div style={styles.sectionTitle}>Link a Source Video</div>
+      <div style={styles.sectionSub}>Paste a publicly accessible MP4/MOV URL; Sync Lipsync 2.0 Pro will align it to your generated audio.</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
+        <input
+          type="url"
+          placeholder="https://example.com/face-shot.mp4"
+          value={videoUrl}
+          onChange={e => setVideoUrl(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "14px 16px",
+            borderRadius: 12,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: "rgba(255,255,255,0.02)",
+            color: "#e2e8f0",
+            fontSize: 15,
+          }}
+        />
+        <div style={{ color: "#94a3b8", fontSize: 12 }}>
+          Tip: use a short, front-facing clip hosted on Cloudflare R2/S3/Dropbox/etc. The URL must be reachable without auth.
         </div>
-      )}
+      </div>
     </div>
   );
 
@@ -1846,48 +1856,53 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
               </button>
             </div>
 
-            {/* Video viewport */}
+            {            {/* Video viewport */}
             <div style={{
               background: "#000", borderRadius: 16, overflow: "hidden",
               aspectRatio: "16/9", display: "flex", alignItems: "center",
               justifyContent: "center", marginBottom: 20, position: "relative",
               border: "1px solid rgba(255,255,255,0.1)",
             }}>
-              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #0f0a1e 0%, #1a0533 100%)" }} />
-              <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
-                <LipSyncFace speaking={speaking} imageUrl={imageUrl} />
-                <div style={{ marginTop: 16 }}><Waveform active={speaking} color="#a78bfa" /></div>
-                <div style={{ marginTop: 12, color: "#64748b", fontSize: 12 }}>
-                  {selectedVoice.emoji} {selectedVoice.label} Â· {selectedMusic.icon} {selectedMusic.label} Â· {selectedEmotion}
-                </div>
-              </div>
-              {/* Play/Stop overlay */}
-              <button onClick={() => handlePreview()}
-                style={{
-                  position: "absolute", inset: 0, width: "100%", background: speaking ? "transparent" : "rgba(0,0,0,0.3)",
-                  border: "none", cursor: "pointer", display: "flex",
-                  alignItems: "center", justifyContent: "center", transition: "background 0.2s",
-                }}>
-                {!speaking && (
-                  <div style={{
-                    width: 64, height: 64, borderRadius: "50%",
-                    background: "rgba(124,58,237,0.85)", display: "flex",
-                    alignItems: "center", justifyContent: "center", fontSize: 24,
-                    backdropFilter: "blur(8px)", boxShadow: "0 0 30px rgba(124,58,237,0.5)",
-                  }}>â–¶</div>
-                )}
-                {speaking && (
-                  <div style={{
-                    position: "absolute", bottom: 14, right: 14,
-                    background: "rgba(239,68,68,0.85)", borderRadius: 8,
-                    padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "#fff",
-                    backdropFilter: "blur(8px)",
-                  }}>â¹ Stop</div>
-                )}
-              </button>
-            </div>
-
-            {/* Action buttons */}
+              {lipSyncVideoUrl ? (
+                <video src={lipSyncVideoUrl} controls autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <>
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #0f0a1e 0%, #1a0533 100%)" }} />
+                  <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
+                    <LipSyncFace speaking={speaking || lipSyncLoading} imageUrl={imageUrl} />
+                    <div style={{ marginTop: 16 }}><Waveform active={speaking || lipSyncLoading} color="#a78bfa" /></div>
+                    <div style={{ marginTop: 12, color: "#64748b", fontSize: 12 }}>
+                      {selectedVoice.emoji} {selectedVoice.label} · {selectedMusic.icon} {selectedMusic.label} · {selectedEmotion}
+                    </div>
+                    {lipSyncLoading && <div style={{ marginTop: 8, color: "#a78bfa", fontSize: 12 }}>Sync Lipsync 2.0 Pro running…</div>}
+                  </div>
+                  {/* Play/Stop overlay */}
+                  <button onClick={() => handlePreview()}
+                    style={{
+                      position: "absolute", inset: 0, width: "100%", background: speaking ? "transparent" : "rgba(0,0,0,0.3)",
+                      border: "none", cursor: "pointer", display: "flex",
+                      alignItems: "center", justifyContent: "center", transition: "background 0.2s",
+                    }}>
+                    {!speaking && (
+                      <div style={{
+                        width: 64, height: 64, borderRadius: "50%",
+                        background: "rgba(124,58,237,0.85)", display: "flex",
+                        alignItems: "center", justifyContent: "center", fontSize: 24,
+                        backdropFilter: "blur(8px)", boxShadow: "0 0 30px rgba(124,58,237,0.5)",
+                      }}>▶</div>
+                    )}
+                    {speaking && (
+                      <div style={{
+                        position: "absolute", bottom: 14, right: 14,
+                        background: "rgba(239,68,68,0.85)", borderRadius: 8,
+                        padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "#fff",
+                        backdropFilter: "blur(8px)",
+                      }}>⏹ Stop</div>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>/* Action buttons */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
               <button
                 style={{
@@ -1960,7 +1975,8 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
                 onClick={() => {
                   stopAudio();
                   setGenerated(false); setStep(0);
-                  setImage(null); setImageUrl(null); setScript("");
+                  setImage(null); setImageUrl(null); setVideoUrl(""); setLipSyncVideoUrl(null);
+                  setScript("");
                   setSpeaking(false); setPreviewActive(false);
                   setSelectedVoice(VOICES[0]); setVoiceSpeed(1.0);
                   setEditingSection(null); setTtsCache({});
@@ -2091,6 +2107,8 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
     </div>
   );
 }
+
+
 
 
 
