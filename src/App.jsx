@@ -201,6 +201,7 @@ const VOICES = VOICE_GROUPS.flatMap(g => g.voices);
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim();
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY?.trim();
+const SAMPLE_VIDEO_URL = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
 const OPEN_TTS_VOICES = [
   {
     id: "ljspeech",
@@ -440,7 +441,7 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [image, setImage] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
-  const [videoUrl, setVideoUrl] = useState("");
+  const [videoUrl, setVideoUrl] = useState(SAMPLE_VIDEO_URL);
   const [lipSyncVideoUrl, setLipSyncVideoUrl] = useState(null);
   const [lipSyncLoading, setLipSyncLoading] = useState(false);
   const [script, setScript] = useState("");
@@ -966,6 +967,7 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
         <div style={{ color: "#94a3b8", fontSize: 12 }}>
           Tip: use a short, front-facing clip hosted on Cloudflare R2/S3/Dropbox/etc. The URL must be reachable without auth.
         </div>
+        <div style={{ color: "#a78bfa", fontSize: 12 }}>A demo clip is preloaded so you can continue right away.</div>
       </div>
     </div>
   );
@@ -1976,7 +1978,7 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
                 onClick={() => {
                   stopAudio();
                   setGenerated(false); setStep(0);
-                  setImage(null); setImageUrl(null); setVideoUrl(""); setLipSyncVideoUrl(null);
+                  setImage(null); setImageUrl(null); setVideoUrl(SAMPLE_VIDEO_URL); setLipSyncVideoUrl(null);
                   setScript("");
                   setSpeaking(false); setPreviewActive(false);
                   setSelectedVoice(VOICES[0]); setVoiceSpeed(1.0);
