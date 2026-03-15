@@ -1,195 +1,195 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+﻿import React, { useState, useRef, useEffect, useCallback } from "react";
 
 const MUSIC_GENRES = [
-  { id: "cinematic", label: "Cinematic", icon: "🎬", desc: "Epic orchestral" },
-  { id: "ambient", label: "Ambient", icon: "🌌", desc: "Calm & atmospheric" },
-  { id: "corporate", label: "Corporate", icon: "💼", desc: "Professional & clean" },
-  { id: "upbeat", label: "Upbeat", icon: "⚡", desc: "Energetic & lively" },
-  { id: "emotional", label: "Emotional", icon: "💫", desc: "Warm & heartfelt" },
-  { id: "none", label: "No Music", icon: "🔇", desc: "Voice only" },
+  { id: "cinematic", label: "Cinematic", icon: "ðŸŽ¬", desc: "Epic orchestral" },
+  { id: "ambient", label: "Ambient", icon: "ðŸŒŒ", desc: "Calm & atmospheric" },
+  { id: "corporate", label: "Corporate", icon: "ðŸ’¼", desc: "Professional & clean" },
+  { id: "upbeat", label: "Upbeat", icon: "âš¡", desc: "Energetic & lively" },
+  { id: "emotional", label: "Emotional", icon: "ðŸ’«", desc: "Warm & heartfelt" },
+  { id: "none", label: "No Music", icon: "ðŸ”‡", desc: "Voice only" },
 ];
 
-// ─── Claude TTS Voice Engine ───────────────────────────────────────────────
+// â”€â”€â”€ Claude TTS Voice Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Uses Anthropic's native audio output (claude-sonnet-4-20250514) for
-// genuinely natural, human-sounding speech — not browser synthesis.
+// genuinely natural, human-sounding speech â€” not browser synthesis.
 //
 // Each profile maps to one of Claude's built-in TTS voices plus a persona
 // system prompt that shapes accent, pace, and emotional colour.
 //
-// Available Claude TTS voices: alloy · echo · fable · onyx · nova · shimmer
-// ─────────────────────────────────────────────────────────────────────────────
+// Available Claude TTS voices: alloy Â· echo Â· fable Â· onyx Â· nova Â· shimmer
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const VOICE_GROUPS = [
   {
-    group: "🌏 Indian Voices",
+    group: "ðŸŒ Indian Voices",
     color: "#f97316",
     voices: [
       {
         id: "priya", label: "Priya", gender: "female", style: "Warm & Melodic", accent: "Indian",
-        emoji: "🌸", desc: "Soft, melodic tone with a natural Indian lilt",
+        emoji: "ðŸŒ¸", desc: "Soft, melodic tone with a natural Indian lilt",
         claudeVoice: "shimmer",
         persona: "You are Priya, a warm and melodic Indian woman. Speak with a gentle South Asian lilt, soft consonants, a naturally musical rhythm, and heartfelt warmth. Your pace is unhurried and expressive.",
-        sampleText: "Namaste! I'm Priya — warm, melodic, and expressive.",
-        flag: "🇮🇳",
+        sampleText: "Namaste! I'm Priya â€” warm, melodic, and expressive.",
+        flag: "ðŸ‡®ðŸ‡³",
       },
       {
         id: "arjun", label: "Arjun", gender: "male", style: "Confident & Clear", accent: "Indian",
-        emoji: "🎯", desc: "Crisp, professional delivery with authoritative presence",
+        emoji: "ðŸŽ¯", desc: "Crisp, professional delivery with authoritative presence",
         claudeVoice: "onyx",
         persona: "You are Arjun, a confident and articulate Indian professional. Speak with a crisp North Indian English accent, clear enunciation, measured authority, and an assured, forward-leaning energy.",
-        sampleText: "Hello, Arjun here — confident and articulate.",
-        flag: "🇮🇳",
+        sampleText: "Hello, Arjun here â€” confident and articulate.",
+        flag: "ðŸ‡®ðŸ‡³",
       },
       {
         id: "kavya", label: "Kavya", gender: "female", style: "Bright & Expressive", accent: "South Indian",
-        emoji: "✨", desc: "Vibrant and expressive with a South Indian cadence",
+        emoji: "âœ¨", desc: "Vibrant and expressive with a South Indian cadence",
         claudeVoice: "nova",
         persona: "You are Kavya, a bright and expressive young woman from South India. Speak with a vibrant Kannada-influenced English cadence, slightly faster pace, rising intonation, and genuine enthusiasm.",
-        sampleText: "Hi! I'm Kavya — bright, expressive and full of life!",
-        flag: "🇮🇳",
+        sampleText: "Hi! I'm Kavya â€” bright, expressive and full of life!",
+        flag: "ðŸ‡®ðŸ‡³",
       },
       {
         id: "vikram", label: "Vikram", gender: "male", style: "Deep & Narrative", accent: "North Indian",
-        emoji: "🏔️", desc: "Rich baritone with a deliberate storytelling pace",
+        emoji: "ðŸ”ï¸", desc: "Rich baritone with a deliberate storytelling pace",
         claudeVoice: "fable",
         persona: "You are Vikram, a deep-voiced storyteller from North India. Speak with a resonant Hindi-accented baritone, deliberate pacing, strong consonants, and the gravitas of a seasoned narrator.",
         sampleText: "Vikram speaking. Every word carries weight and depth.",
-        flag: "🇮🇳",
+        flag: "ðŸ‡®ðŸ‡³",
       },
     ],
   },
   {
-    group: "🌺 Telugu Voices",
+    group: "ðŸŒº Telugu Voices",
     color: "#10b981",
     voices: [
       {
         id: "lakshmi", label: "Lakshmi", gender: "female", style: "Graceful & Warm", accent: "Telugu",
-        emoji: "🌺", desc: "Melodious Telugu lilt with graceful South Indian warmth",
+        emoji: "ðŸŒº", desc: "Melodious Telugu lilt with graceful South Indian warmth",
         claudeVoice: "shimmer",
-        persona: "You are Lakshmi, a graceful Telugu woman from Andhra Pradesh. Speak English with a beautiful Telugu-influenced cadence — soft retroflex consonants, gently musical intonation, warm vowels, and the dignified poise of a classical South Indian speaker. Your tone is sincere and heartfelt.",
-        sampleText: "Namaskaram! I am Lakshmi — graceful, warm, and deeply expressive.",
-        flag: "🇮🇳",
+        persona: "You are Lakshmi, a graceful Telugu woman from Andhra Pradesh. Speak English with a beautiful Telugu-influenced cadence â€” soft retroflex consonants, gently musical intonation, warm vowels, and the dignified poise of a classical South Indian speaker. Your tone is sincere and heartfelt.",
+        sampleText: "Namaskaram! I am Lakshmi â€” graceful, warm, and deeply expressive.",
+        flag: "ðŸ‡®ðŸ‡³",
       },
       {
         id: "krishna", label: "Krishna", gender: "male", style: "Strong & Resonant", accent: "Telugu",
-        emoji: "🏺", desc: "Deep, authoritative Telugu male with commanding presence",
+        emoji: "ðŸº", desc: "Deep, authoritative Telugu male with commanding presence",
         claudeVoice: "onyx",
-        persona: "You are Krishna, a confident Telugu man from Hyderabad. Speak English with a strong Telugu-accented baritone — distinct retroflex sounds, measured authority, slightly elongated vowels, and the commanding presence of a Telangana professional. Clear, direct, and trustworthy.",
-        sampleText: "Hello! Krishna here — strong, clear, and confident.",
-        flag: "🇮🇳",
+        persona: "You are Krishna, a confident Telugu man from Hyderabad. Speak English with a strong Telugu-accented baritone â€” distinct retroflex sounds, measured authority, slightly elongated vowels, and the commanding presence of a Telangana professional. Clear, direct, and trustworthy.",
+        sampleText: "Hello! Krishna here â€” strong, clear, and confident.",
+        flag: "ðŸ‡®ðŸ‡³",
       },
       {
         id: "divya", label: "Divya", gender: "female", style: "Bright & Youthful", accent: "Telugu",
-        emoji: "✨", desc: "Energetic young Telugu woman, modern and expressive",
+        emoji: "âœ¨", desc: "Energetic young Telugu woman, modern and expressive",
         claudeVoice: "nova",
         persona: "You are Divya, a bright and enthusiastic young Telugu woman from Hyderabad. Speak with vibrant energy, a modern Hyderabadi English accent with Telugu cadence, fast-paced rhythm, naturally rising intonation, and infectious positivity. You blend tech-city confidence with traditional warmth.",
-        sampleText: "Hi everyone! Divya here — energetic, modern, and ready to inspire!",
-        flag: "🇮🇳",
+        sampleText: "Hi everyone! Divya here â€” energetic, modern, and ready to inspire!",
+        flag: "ðŸ‡®ðŸ‡³",
       },
     ],
   },
   {
-    group: "🎶 Tamil Voices",
+    group: "ðŸŽ¶ Tamil Voices",
     color: "#f43f5e",
     voices: [
       {
         id: "meenakshi", label: "Meenakshi", gender: "female", style: "Classical & Elegant", accent: "Tamil",
-        emoji: "🪷", desc: "Elegant Tamil cadence with classical poise",
+        emoji: "ðŸª·", desc: "Elegant Tamil cadence with classical poise",
         claudeVoice: "shimmer",
-        persona: "You are Meenakshi, an elegant Tamil woman from Chennai. Speak English with a refined Tamil Nadu accent — distinct Tamil consonants, a beautifully rhythmic cadence, precise articulation, and the dignified warmth of a Chennai professional. Your speech has the grace of classical South Indian culture.",
-        sampleText: "Vanakkam! I am Meenakshi — elegant, precise, and warmly expressive.",
-        flag: "🇮🇳",
+        persona: "You are Meenakshi, an elegant Tamil woman from Chennai. Speak English with a refined Tamil Nadu accent â€” distinct Tamil consonants, a beautifully rhythmic cadence, precise articulation, and the dignified warmth of a Chennai professional. Your speech has the grace of classical South Indian culture.",
+        sampleText: "Vanakkam! I am Meenakshi â€” elegant, precise, and warmly expressive.",
+        flag: "ðŸ‡®ðŸ‡³",
       },
       {
         id: "murugan", label: "Murugan", gender: "male", style: "Bold & Expressive", accent: "Tamil",
-        emoji: "🦁", desc: "Spirited Tamil male with bold expressive delivery",
+        emoji: "ðŸ¦", desc: "Spirited Tamil male with bold expressive delivery",
         claudeVoice: "fable",
-        persona: "You are Murugan, a bold and expressive Tamil man from Tamil Nadu. Speak English with a strong Tamil accent — distinctive Tamil retroflex consonants, emphatic stress patterns, passionate delivery, and the spirited energy of a Chennai storyteller. Your voice carries deep cultural pride.",
-        sampleText: "Hello! Murugan speaking — bold, expressive, and full of spirit.",
-        flag: "🇮🇳",
+        persona: "You are Murugan, a bold and expressive Tamil man from Tamil Nadu. Speak English with a strong Tamil accent â€” distinctive Tamil retroflex consonants, emphatic stress patterns, passionate delivery, and the spirited energy of a Chennai storyteller. Your voice carries deep cultural pride.",
+        sampleText: "Hello! Murugan speaking â€” bold, expressive, and full of spirit.",
+        flag: "ðŸ‡®ðŸ‡³",
       },
       {
         id: "kavitha", label: "Kavitha", gender: "female", style: "Soft & Poetic", accent: "Tamil",
-        emoji: "🌸", desc: "Gentle and poetic Tamil voice with lyrical quality",
+        emoji: "ðŸŒ¸", desc: "Gentle and poetic Tamil voice with lyrical quality",
         claudeVoice: "alloy",
-        persona: "You are Kavitha, a soft-spoken and poetic Tamil woman from Coimbatore. Speak English with a gentle Tamil lilt — melodious intonation, thoughtful pacing, soft consonants, and the lyrical quality of Tamil literature brought to life. Your voice is like poetry in motion.",
-        sampleText: "Hello! I am Kavitha — soft, poetic, and lyrical in every word.",
-        flag: "🇮🇳",
+        persona: "You are Kavitha, a soft-spoken and poetic Tamil woman from Coimbatore. Speak English with a gentle Tamil lilt â€” melodious intonation, thoughtful pacing, soft consonants, and the lyrical quality of Tamil literature brought to life. Your voice is like poetry in motion.",
+        sampleText: "Hello! I am Kavitha â€” soft, poetic, and lyrical in every word.",
+        flag: "ðŸ‡®ðŸ‡³",
       },
     ],
   },
   {
-    group: "🗽 Indian-American Voices",
+    group: "ðŸ—½ Indian-American Voices",
     color: "#06b6d4",
     voices: [
       {
         id: "ananya", label: "Ananya", gender: "female", style: "Polished & Modern", accent: "Indian-American",
-        emoji: "💫", desc: "Smooth American fluency with a subtle South Asian warmth",
+        emoji: "ðŸ’«", desc: "Smooth American fluency with a subtle South Asian warmth",
         claudeVoice: "shimmer",
         persona: "You are Ananya, a first-generation Indian-American woman. Speak with polished American fluency but with a subtle South Asian warmth in your vowels. You are modern, articulate, and culturally confident.",
-        sampleText: "Hey! Ananya here — polished, modern, and culturally fluid.",
-        flag: "🇺🇸🇮🇳",
+        sampleText: "Hey! Ananya here â€” polished, modern, and culturally fluid.",
+        flag: "ðŸ‡ºðŸ‡¸ðŸ‡®ðŸ‡³",
       },
       {
         id: "rohan", label: "Rohan", gender: "male", style: "Smooth & Dynamic", accent: "Indian-American",
-        emoji: "🚀", desc: "Energetic American cadence with a hint of Indian heritage",
+        emoji: "ðŸš€", desc: "Energetic American cadence with a hint of Indian heritage",
         claudeVoice: "echo",
         persona: "You are Rohan, a dynamic Indian-American man in his 30s. Speak with energetic American cadence, confident rhythm, and a very subtle Indian-heritage warmth. You sound sharp, modern, and inspiring.",
-        sampleText: "Rohan here — dynamic, sharp, and ready to inspire.",
-        flag: "🇺🇸🇮🇳",
+        sampleText: "Rohan here â€” dynamic, sharp, and ready to inspire.",
+        flag: "ðŸ‡ºðŸ‡¸ðŸ‡®ðŸ‡³",
       },
     ],
   },
   {
-    group: "🌍 International Voices",
+    group: "ðŸŒ International Voices",
     color: "#a78bfa",
     voices: [
       {
         id: "nova", label: "Nova", gender: "female", style: "Professional", accent: "American",
-        emoji: "👩‍💼", desc: "Clear, confident American newsreader",
+        emoji: "ðŸ‘©â€ðŸ’¼", desc: "Clear, confident American newsreader",
         claudeVoice: "nova",
         persona: "You are Nova, a professional American female broadcaster. Speak with clear, crisp American English, confident pacing, and a polished newsreader tone. Authoritative yet approachable.",
-        sampleText: "Hello! I'm Nova — professional and clear.",
-        flag: "🇺🇸",
+        sampleText: "Hello! I'm Nova â€” professional and clear.",
+        flag: "ðŸ‡ºðŸ‡¸",
       },
       {
         id: "echo", label: "Echo", gender: "male", style: "Deep & Rich", accent: "British",
-        emoji: "🎙️", desc: "Warm baritone with British authority",
+        emoji: "ðŸŽ™ï¸", desc: "Warm baritone with British authority",
         claudeVoice: "onyx",
         persona: "You are Echo, a British male with a deep, resonant voice. Speak with a refined RP British accent, measured pace, warm baritone depth, and understated authority. Think BBC documentary narrator.",
         sampleText: "Echo here. Deep, British, and authoritative.",
-        flag: "🇬🇧",
+        flag: "ðŸ‡¬ðŸ‡§",
       },
       {
         id: "aria", label: "Aria", gender: "female", style: "Warm & Natural", accent: "Australian",
-        emoji: "🌿", desc: "Conversational, friendly Australian",
+        emoji: "ðŸŒ¿", desc: "Conversational, friendly Australian",
         claudeVoice: "alloy",
-        persona: "You are Aria, a warm and friendly Australian woman. Speak with a natural Australian accent — slightly upward inflection, relaxed and conversational, genuinely warm and inviting. Never stiff.",
-        sampleText: "Hi there! Aria speaking — warm and natural.",
-        flag: "🇦🇺",
+        persona: "You are Aria, a warm and friendly Australian woman. Speak with a natural Australian accent â€” slightly upward inflection, relaxed and conversational, genuinely warm and inviting. Never stiff.",
+        sampleText: "Hi there! Aria speaking â€” warm and natural.",
+        flag: "ðŸ‡¦ðŸ‡º",
       },
       {
         id: "orion", label: "Orion", gender: "male", style: "Calm & Measured", accent: "American",
-        emoji: "🌌", desc: "Soothing, meditative American narrator",
+        emoji: "ðŸŒŒ", desc: "Soothing, meditative American narrator",
         claudeVoice: "fable",
         persona: "You are Orion, a calm and meditative American male narrator. Speak slowly, with intentional pauses, a soothing low register, and a sense of peaceful authority. Like a mindfulness guide or nature documentary voice.",
         sampleText: "Orion. Slow, calm, and measured.",
-        flag: "🇺🇸",
+        flag: "ðŸ‡ºðŸ‡¸",
       },
       {
         id: "sage", label: "Sage", gender: "female", style: "Energetic", accent: "Irish",
-        emoji: "⚡", desc: "Bright and lively with an Irish lilt",
+        emoji: "âš¡", desc: "Bright and lively with an Irish lilt",
         claudeVoice: "shimmer",
         persona: "You are Sage, an energetic young Irish woman. Speak with a bright Dublin accent, fast-paced rhythm, natural Irish musicality in your intonation, and contagious enthusiasm. Lively and fun.",
-        sampleText: "Sage here — upbeat and full of energy!",
-        flag: "🇮🇪",
+        sampleText: "Sage here â€” upbeat and full of energy!",
+        flag: "ðŸ‡®ðŸ‡ª",
       },
       {
         id: "atlas", label: "Atlas", gender: "male", style: "Storyteller", accent: "Scottish",
-        emoji: "📖", desc: "Rich Scottish character voice",
+        emoji: "ðŸ“–", desc: "Rich Scottish character voice",
         claudeVoice: "echo",
         persona: "You are Atlas, a Scottish male storyteller with a rich, expressive voice. Speak with a warm Scottish burr, rolling Rs, expressive cadence, and the soulful depth of a Highland bard. Every sentence feels like a story.",
         sampleText: "Atlas. Every word tells a story.",
-        flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+        flag: "ðŸ´ó §ó ¢ó ³ó £ó ´ó ¿",
       },
     ],
   },
@@ -200,166 +200,65 @@ const VOICES = VOICE_GROUPS.flatMap(g => g.voices);
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim();
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
-const GEMINI_VOICE_NAME = "Kore";
-
-function pcmToWavBlob(base64Pcm, sampleRate = 24000) {
-  const pcmBytes = Uint8Array.from(atob(base64Pcm), (char) => char.charCodeAt(0));
-  const wavBuffer = new ArrayBuffer(44 + pcmBytes.length);
-  const view = new DataView(wavBuffer);
-  const writeString = (offset, value) => {
-    for (let i = 0; i < value.length; i++) {
-      view.setUint8(offset + i, value.charCodeAt(i));
-    }
-  };
-
-  writeString(0, "RIFF");
-  view.setUint32(4, 36 + pcmBytes.length, true);
-  writeString(8, "WAVE");
-  writeString(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, "data");
-  view.setUint32(40, pcmBytes.length, true);
-
-  new Uint8Array(wavBuffer, 44).set(pcmBytes);
-  return new Blob([wavBuffer], { type: "audio/wav" });
-}
-
-const GEMINI_VOICE = {
-  id: "gemini-kore",
-  label: "Gemini Kore",
-  gender: "neutral",
-  style: "Firm & Natural",
-  accent: "American",
-  emoji: "🤖",
-  desc: "Google Gemini TTS voice with a clean, natural studio sound",
-  provider: "gemini",
-  geminiVoice: GEMINI_VOICE_NAME,
-  sampleText: "This is Gemini Kore. Firm, clear, and naturally expressive.",
-  flag: "AI",
-};
-
-const ALL_VOICES = [...VOICES, GEMINI_VOICE];
-
-const NATURAL_GEMINI_VOICES = [
+const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY?.trim();
+const OPEN_TTS_VOICES = [
   {
-    id: "gemini-despina",
-    label: "Despina",
-    gender: "neutral",
-    style: "Smooth",
-    accent: "American",
-    emoji: "🎙",
-    desc: "Smooth and polished for product demos, explainers, and premium narration",
-    provider: "gemini",
-    geminiVoice: "Despina",
-    sampleText: "Despina here. Smooth, polished, and naturally easy to listen to.",
-    flag: "G",
-  },
-  {
-    id: "gemini-algieba",
-    label: "Algieba",
-    gender: "neutral",
-    style: "Smooth",
-    accent: "Neutral",
-    emoji: "✨",
-    desc: "Balanced studio delivery with a rounded, refined tone",
-    provider: "gemini",
-    geminiVoice: "Algieba",
-    sampleText: "Algieba here. Rounded, refined, and steady from start to finish.",
-    flag: "G",
-  },
-  {
-    id: "gemini-sulafat",
-    label: "Sulafat",
+    id: "ljspeech",
+    label: "LJSpeech (Female)",
     gender: "female",
-    style: "Warm",
-    accent: "Neutral",
-    emoji: "🌿",
-    desc: "Warm and rich voice that feels more human and less synthetic",
-    provider: "gemini",
-    geminiVoice: "Sulafat",
-    sampleText: "Sulafat speaking. Warm, rich, and natural without sounding forced.",
-    flag: "G",
+    style: "Warm and Clear",
+    accent: "US English",
+    model: "espnet/kan-bayashi_ljspeech_vits",
+    emoji: "🎙️",
+    desc: "Open VITS model trained on LJSpeech — friendly and clear for general narration.",
+    sampleText: "Hi there, I'm an open-source LJSpeech voice — natural, warm, and easy to listen to.",
+    flag: "OSS",
   },
   {
-    id: "gemini-vindemiatrix",
-    label: "Vindemiatrix",
+    id: "vctk-p225",
+    label: "VCTK P225",
     gender: "female",
-    style: "Gentle",
-    accent: "Neutral",
-    emoji: "🌊",
-    desc: "Gentle, soft delivery for calm storytelling and intimate reads",
-    provider: "gemini",
-    geminiVoice: "Vindemiatrix",
-    sampleText: "Vindemiatrix here. Gentle, calm, and softly expressive.",
-    flag: "G",
+    style: "Bright and Precise",
+    accent: "UK English",
+    model: "espnet/kan-bayashi_vctk_single_p225",
+    emoji: "🇬🇧",
+    desc: "VITS single-speaker model (P225) from VCTK — crisp British delivery.",
+    sampleText: "Hello! This is the VCTK P225 voice with a bright British accent.",
+    flag: "OSS",
   },
   {
-    id: "gemini-achernar",
-    label: "Achernar",
-    gender: "male",
-    style: "Soft",
-    accent: "Neutral",
-    emoji: "🌙",
-    desc: "Soft-spoken voice with reduced harshness and a lighter touch",
-    provider: "gemini",
-    geminiVoice: "Achernar",
-    sampleText: "Achernar speaking. Soft-spoken, measured, and comfortably natural.",
-    flag: "G",
-  },
-  {
-    id: "gemini-achird",
-    label: "Achird",
-    gender: "neutral",
-    style: "Friendly",
-    accent: "American",
-    emoji: "🤝",
-    desc: "Friendly voice with easy phrasing and conversational warmth",
-    provider: "gemini",
-    geminiVoice: "Achird",
-    sampleText: "Achird here. Friendly, relaxed, and easy to listen to.",
-    flag: "G",
-  },
-  {
-    id: "gemini-schedar",
-    label: "Schedar",
-    gender: "neutral",
-    style: "Even",
-    accent: "Neutral",
-    emoji: "🧊",
-    desc: "Even and composed voice for steady narration without choppiness",
-    provider: "gemini",
-    geminiVoice: "Schedar",
-    sampleText: "Schedar here. Even, composed, and steady all the way through.",
-    flag: "G",
-  },
-  {
-    id: "gemini-aoede",
-    label: "Aoede",
+    id: "vctk-p243",
+    label: "VCTK P243",
     gender: "female",
-    style: "Breezy",
-    accent: "Neutral",
-    emoji: "🌤",
-    desc: "Breezy delivery with natural flow and lighter articulation",
-    provider: "gemini",
-    geminiVoice: "Aoede",
-    sampleText: "Aoede speaking. Breezy, flowing, and light without sounding robotic.",
-    flag: "G",
+    style: "Soft and Calm",
+    accent: "UK English",
+    model: "espnet/kan-bayashi_vctk_single_p243",
+    emoji: "🫖",
+    desc: "VITS single-speaker model (P243) — softer British tone for calming reads.",
+    sampleText: "I'm the VCTK P243 voice — softer, calming, and easy-going.",
+    flag: "OSS",
+  },
+  {
+    id: "mms-en",
+    label: "MMS English",
+    gender: "neutral",
+    style: "Balanced",
+    accent: "Global English",
+    model: "facebook/mms-tts-eng",
+    emoji: "🌍",
+    desc: "Meta MMS open multilingual TTS — balanced global English pronunciation.",
+    sampleText: "This is the MMS English voice — balanced and globally understandable.",
+    flag: "OSS",
   },
 ];
 
-const ACTIVE_VOICES = NATURAL_GEMINI_VOICES.length ? NATURAL_GEMINI_VOICES : ALL_VOICES;
+const ACTIVE_VOICES = OPEN_TTS_VOICES;
 
 const ACTIVE_VOICE_GROUPS = [
   {
-    group: "Gemini Natural Voices",
-    color: "#60a5fa",
-    voices: ACTIVE_VOICES,
+    group: "Open TTS Voices (Hugging Face)",
+    color: "#7c3aed",
+    voices: OPEN_TTS_VOICES,
   },
 ];
 
@@ -377,7 +276,7 @@ const STEPS = ["Upload", "Script", "Voice", "Music", "Generate"];
 // --- Animated waveform for lipsync preview ---
 function Waveform({ active, color = "#a78bfa" }) {
   const bars = 32;
-  // BUG FIX: Math.random() was inlined in JSX style → called on every render,
+  // BUG FIX: Math.random() was inlined in JSX style â†’ called on every render,
   // causing non-deterministic heights that reset on every parent re-render.
   // Fix: seed heights once per mount with useMemo.
   const [heights] = useState(() => Array.from({ length: bars }, () => 10 + Math.random() * 30));
@@ -402,10 +301,10 @@ function Waveform({ active, color = "#a78bfa" }) {
 
 // --- Lip sync face animation ---
 // FIXES:
-//   • Head bob: subtle sine-wave vertical movement (±3px) tied to speaking frame
-//   • Blink: eyes close for 4 frames every 72 frames (~3s at 24fps)
-//   • Breathing: gentle scale pulse (±0.3%) on a 60-frame cycle
-//   • Mouth position: moved to 62% down the face (was 38% — was placing it on the forehead)
+//   â€¢ Head bob: subtle sine-wave vertical movement (Â±3px) tied to speaking frame
+//   â€¢ Blink: eyes close for 4 frames every 72 frames (~3s at 24fps)
+//   â€¢ Breathing: gentle scale pulse (Â±0.3%) on a 60-frame cycle
+//   â€¢ Mouth position: moved to 62% down the face (was 38% â€” was placing it on the forehead)
 const LIP_FRAMES = [0, 1, 2, 3, 2, 1];
 
 function LipSyncFace({ speaking, imageUrl }) {
@@ -428,8 +327,8 @@ function LipSyncFace({ speaking, imageUrl }) {
   const mouthOpen = LIP_FRAMES[frame];
   const mouthHeight = [0, 4, 8, 12, 8, 4][mouthOpen] || 0;
 
-  // Natural face movement — only animate when speaking
-  const headBob = speaking ? Math.sin(blinkFrame * 0.08) * 3 : 0;         // ±3px vertical bob
+  // Natural face movement â€” only animate when speaking
+  const headBob = speaking ? Math.sin(blinkFrame * 0.08) * 3 : 0;         // Â±3px vertical bob
   const isBlinking = speaking && (blinkFrame % 72) < 4;                       // blink every ~3s
   const breathScale = speaking ? 1 + Math.sin(blinkFrame * (2 * Math.PI / 60)) * 0.003 : 1; // subtle breathing
 
@@ -454,7 +353,7 @@ function LipSyncFace({ speaking, imageUrl }) {
             <img src={imageUrl} alt="Avatar"
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
 
-            {/* Blink overlay — darkens eye region */}
+            {/* Blink overlay â€” darkens eye region */}
             {isBlinking && (
               <div style={{
                 position: "absolute", top: "22%", left: "10%", width: "80%", height: "20%",
@@ -463,10 +362,10 @@ function LipSyncFace({ speaking, imageUrl }) {
               }} />
             )}
 
-            {/* Lip sync mouth overlay — FIXED position: 62% down (was 38% = forehead) */}
+            {/* Lip sync mouth overlay â€” FIXED position: 62% down (was 38% = forehead) */}
             <div style={{
               position: "absolute",
-              bottom: "18%",             // 18% from bottom ≈ chin area
+              bottom: "18%",             // 18% from bottom â‰ˆ chin area
               left: "50%",
               transform: "translateX(-50%)",
               width: 36,
@@ -486,9 +385,9 @@ function LipSyncFace({ speaking, imageUrl }) {
             boxShadow: speaking ? "0 0 30px rgba(167,139,250,0.5)" : "none",
           }}>
             {/* Emoji face */}
-            <div style={{ fontSize: 64 }}>👤</div>
+            <div style={{ fontSize: 64 }}>ðŸ‘¤</div>
 
-            {/* Blink — covers eye area of emoji */}
+            {/* Blink â€” covers eye area of emoji */}
             {isBlinking && (
               <div style={{
                 position: "absolute", top: "28%", left: "20%", width: "60%", height: "16%",
@@ -563,39 +462,48 @@ export default function App() {
   const audioContextRef = useRef(null);
   const audioGraphCleanupRef = useRef(null);
 
-  // ── Claude TTS engine ────────────────────────────────────────────────────
+  // â”€â”€ Claude TTS engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Calls Anthropic /v1/messages with output_audio to get natural speech.
   // Returns a base64 PCM audio blob URL, or null on failure.
   const [ttsLoading, setTtsLoading] = useState(false);
-  const [ttsCache, setTtsCache] = useState({});   // key → objectURL, avoid re-fetching
+  const [ttsCache, setTtsCache] = useState({});   // key â†’ objectURL, avoid re-fetching
   const [rewritingScript, setRewritingScript] = useState(false);
   const [rewriteError, setRewriteError] = useState(null);
 
-  // ── Emotion-based script rewriter ─────────────────────────────────────────
+  // â”€â”€ Emotion-based script rewriter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Calls Claude text API to rewrite the current script matching the chosen emotion.
   const handleRewriteScript = useCallback(async () => {
     if (!script.trim() || selectedEmotion === "Neutral") return;
+    if (!CLAUDE_API_KEY) {
+      setRewriteError("Add VITE_CLAUDE_API_KEY to enable rewrite");
+      setTimeout(() => setRewriteError(null), 3000);
+      return;
+    }
     setRewritingScript(true);
     setRewriteError(null);
     try {
       const emotionPrompts = {
-        Happy: "rewrite it to sound joyful, upbeat, and celebratory — use warm, positive language and an energetic rhythm",
-        Serious: "rewrite it to sound authoritative, measured, and gravely sincere — use precise language and a composed, weighty tone",
-        Excited: "rewrite it to sound thrilling and enthusiastic — use exclamations, energetic phrasing, and a sense of building momentum",
-        Calm: "rewrite it to sound peaceful, soothing, and reassuring — use gentle language, smooth transitions, and a meditative flow",
-        Inspirational: "rewrite it to sound motivating and uplifting — use powerful imagery, strong calls to action, and an emotionally resonant narrative arc",
+        Happy: "rewrite it to sound joyful, upbeat, and celebratory â€” use warm, positive language and an energetic rhythm",
+        Serious: "rewrite it to sound authoritative, measured, and gravely sincere â€” use precise language and a composed, weighty tone",
+        Excited: "rewrite it to sound thrilling and enthusiastic â€” use exclamations, energetic phrasing, and a sense of building momentum",
+        Calm: "rewrite it to sound peaceful, soothing, and reassuring â€” use gentle language, smooth transitions, and a meditative flow",
+        Inspirational: "rewrite it to sound motivating and uplifting â€” use powerful imagery, strong calls to action, and an emotionally resonant narrative arc",
       };
       const instruction = emotionPrompts[selectedEmotion] || `rewrite it with a ${selectedEmotion.toLowerCase()} tone`;
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: "claude-3-5-sonnet-20240620",
           max_tokens: 600,
           system: `You are a professional scriptwriter. The user will give you a spoken script. ${instruction}. 
 Keep the same core message and roughly the same length. 
-Return ONLY the rewritten script text — no preamble, no quotes, no explanation.`,
+Return ONLY the rewritten script text â€” no preamble, no quotes, no explanation.`,
           messages: [{ role: "user", content: script }],
         }),
       });
@@ -610,92 +518,42 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
         throw new Error("Empty response");
       }
     } catch (err) {
-      setRewriteError("Rewrite failed — " + err.message);
+      setRewriteError("Rewrite failed â€” " + err.message);
       setTimeout(() => setRewriteError(null), 4000);
     } finally {
       setRewritingScript(false);
     }
   }, [script, selectedEmotion]);
 
-  const callClaudeTTS = useCallback(async (text, voice) => {
+  const HF_MODEL_MAP = {
+    "ljspeech": "espnet/kan-bayashi_ljspeech_vits",
+    "vctk-p225": "espnet/kan-bayashi_vctk_single_p225",
+    "vctk-p243": "espnet/kan-bayashi_vctk_single_p243",
+    "mms-en": "facebook/mms-tts-eng",
+  };
+
+  const callOpenTTS = useCallback(async (text, voice) => {
     const cacheKey = `${voice.id}::${selectedEmotion}::${voiceSmoothness}::${text.slice(0, 120)}`;
     if (ttsCache[cacheKey]) return ttsCache[cacheKey];
 
-    if (voice.provider === "gemini") {
-      if (!GEMINI_API_KEY) throw new Error("Missing VITE_GEMINI_API_KEY for Gemini voice preview");
+    const payload = { text, model: voice.model || HF_MODEL_MAP[voice.id] };
 
-      const emotionHint = selectedEmotion === "Neutral"
-        ? "Keep the emotion grounded and realistic."
-        : `Lean into a ${selectedEmotion.toLowerCase()} emotional tone, but stay human and believable.`;
-      const smoothingHint = getSmoothnessInstruction(voiceSmoothness);
-      const geminiPrompt = [
-        "Read the SCRIPT aloud exactly as written.",
-        emotionHint,
-        smoothingHint,
-        "Avoid robotic pacing, metallic resonance, clipped consonants, and exaggerated pauses.",
-        `SCRIPT: ${text}`,
-      ].join("\n");
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: geminiPrompt }],
-            },
-          ],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: voice.geminiVoice || GEMINI_VOICE_NAME,
-                },
-              },
-            },
-          },
-        }),
-      });
-
-      if (!res.ok) throw new Error(`Gemini TTS API ${res.status}`);
-      const data = await res.json();
-      const audioPart = data.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data);
-      if (!audioPart?.inlineData?.data) throw new Error("No Gemini audio returned");
-
-      const blob = pcmToWavBlob(audioPart.inlineData.data);
-      const url = URL.createObjectURL(blob);
-      setTtsCache((prev) => ({ ...prev, [cacheKey]: url }));
-      return url;
-    }
-
-    const emotionHint = selectedEmotion !== "Neutral"
-      ? ` Speak with a ${selectedEmotion.toLowerCase()} emotional tone.` : "";
-
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        system: voice.persona + emotionHint,
-        messages: [{ role: "user", content: text }],
-        output_audio: { voice: voice.claudeVoice, format: "mp3" },
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error(`TTS API ${res.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `TTS API ${res.status}`);
+    }
+
     const data = await res.json();
-    const audioBlock = data.content?.find((block) => block.type === "audio" || block.audio_data);
-    if (!audioBlock) throw new Error("No audio in response");
+    if (!data.audioUrl) throw new Error("No audio returned");
 
-    const b64 = audioBlock.audio_data ?? audioBlock.data;
-    const bytes = Uint8Array.from(atob(b64), (char) => char.charCodeAt(0));
-    const blob = new Blob([bytes], { type: "audio/mpeg" });
-    const url = URL.createObjectURL(blob);
-
-    setTtsCache((prev) => ({ ...prev, [cacheKey]: url }));
-    return url;
+    setTtsCache((prev) => ({ ...prev, [cacheKey]: data.audioUrl }));
+    return data.audioUrl;
   }, [ttsCache, selectedEmotion, voiceSmoothness]);
 
   const connectSmoothedAudio = useCallback(async (audio) => {
@@ -770,7 +628,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
     setSpeaking(true);
 
     try {
-      const audioUrl = await callClaudeTTS(text, voice);
+      const audioUrl = await callOpenTTS(text, voice);
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
       audio.playbackRate = voiceSpeed;
@@ -798,14 +656,14 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
     } finally {
       setTtsLoading(false);
     }
-  }, [previewActive, script, selectedVoice, voiceSpeed, callClaudeTTS, connectSmoothedAudio, stopAudio]);
+  }, [previewActive, script, selectedVoice, voiceSpeed, callOpenTTS, connectSmoothedAudio, stopAudio]);
 
   useEffect(() => { setCharCount(script.length); }, [script]);
 
   const handleImageUpload = (file) => {
     if (!file) return;
     setImage(file);
-    // Use FileReader to get a base64 data URL — this works for both <img> display
+    // Use FileReader to get a base64 data URL â€” this works for both <img> display
     // AND canvas drawImage() without triggering cross-origin taint or "broken" state.
     // URL.createObjectURL() causes canvas taint in sandboxed iframe environments.
     const reader = new FileReader();
@@ -1069,12 +927,12 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
               border: "3px solid rgba(167,139,250,0.5)",
               boxShadow: "0 0 30px rgba(124,58,237,0.3)",
             }} />
-            <div style={{ color: "#a78bfa", fontWeight: 700 }}>✓ Photo uploaded successfully</div>
+            <div style={{ color: "#a78bfa", fontWeight: 700 }}>âœ“ Photo uploaded successfully</div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Click to replace</div>
           </div>
         ) : (
           <>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📸</div>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>ðŸ“¸</div>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Drop your photo here</div>
             <div style={{ color: "#64748b", fontSize: 14, marginBottom: 16 }}>or click to browse</div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
@@ -1092,10 +950,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
           background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)",
           display: "flex", alignItems: "center", gap: 12,
         }}>
-          <span style={{ fontSize: 18 }}>✅</span>
+          <span style={{ fontSize: 18 }}>âœ…</span>
           <div>
             <div style={{ fontWeight: 700, color: "#34d399", fontSize: 14 }}>Face Detection Ready</div>
-            <div style={{ color: "#64748b", fontSize: 12 }}>68 facial landmarks mapped · Lip region extracted</div>
+            <div style={{ color: "#64748b", fontSize: 12 }}>68 facial landmarks mapped Â· Lip region extracted</div>
           </div>
         </div>
       )}
@@ -1106,7 +964,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
   const renderScript = () => (
     <div style={styles.card}>
       <div style={styles.sectionTitle}>Write Your Script</div>
-      <div style={styles.sectionSub}>Enter the text your avatar will speak — then pick an emotion and let AI rewrite it to match</div>
+      <div style={styles.sectionSub}>Enter the text your avatar will speak â€” then pick an emotion and let AI rewrite it to match</div>
 
       {/* Template starters */}
       <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1137,7 +995,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
           transition: "all 0.3s",
         }}
         placeholder="Type your script here... Use [pause] for breaks and *word* for emphasis."
-        value={rewritingScript ? "✦ Rewriting with AI…" : script}
+        value={rewritingScript ? "âœ¦ Rewriting with AIâ€¦" : script}
         onChange={e => !rewritingScript && setScript(e.target.value)}
         maxLength={1000}
         readOnly={rewritingScript}
@@ -1153,7 +1011,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
           marginTop: 10, padding: "10px 14px", borderRadius: 10,
           background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
           color: "#f87171", fontSize: 13,
-        }}>❌ {rewriteError}</div>
+        }}>âŒ {rewriteError}</div>
       )}
 
       {/* Emotion Tone + Rewrite section */}
@@ -1163,7 +1021,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: 13, color: "#a78bfa", marginBottom: 2, fontWeight: 700, letterSpacing: 0.5 }}>✦ EMOTION TONE</div>
+            <div style={{ fontSize: 13, color: "#a78bfa", marginBottom: 2, fontWeight: 700, letterSpacing: 0.5 }}>âœ¦ EMOTION TONE</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>Select a tone, then rewrite your script with AI to match it perfectly</div>
           </div>
         </div>
@@ -1172,14 +1030,14 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
           {EMOTIONS.map(e => {
             const emotionConfig = {
-              Neutral: { icon: "😐", color: "#94a3b8" },
-              Happy: { icon: "😊", color: "#f59e0b" },
-              Serious: { icon: "🎯", color: "#64748b" },
-              Excited: { icon: "⚡", color: "#f97316" },
-              Calm: { icon: "🌊", color: "#06b6d4" },
-              Inspirational: { icon: "🌟", color: "#a78bfa" },
+              Neutral: { icon: "ðŸ˜", color: "#94a3b8" },
+              Happy: { icon: "ðŸ˜Š", color: "#f59e0b" },
+              Serious: { icon: "ðŸŽ¯", color: "#64748b" },
+              Excited: { icon: "âš¡", color: "#f97316" },
+              Calm: { icon: "ðŸŒŠ", color: "#06b6d4" },
+              Inspirational: { icon: "ðŸŒŸ", color: "#a78bfa" },
             };
-            const cfg = emotionConfig[e] || { icon: "💬", color: "#94a3b8" };
+            const cfg = emotionConfig[e] || { icon: "ðŸ’¬", color: "#94a3b8" };
             const isActive = selectedEmotion === e;
             return (
               <button key={e}
@@ -1221,16 +1079,16 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
             disabled={rewritingScript || !script.trim() || selectedEmotion === "Neutral"}
           >
             {rewritingScript ? (
-              <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>✦</span> Rewriting…</>
+              <><span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>âœ¦</span> Rewritingâ€¦</>
             ) : (
-              <><span>✦</span> Rewrite Script as {selectedEmotion}</>
+              <><span>âœ¦</span> Rewrite Script as {selectedEmotion}</>
             )}
           </button>
           {selectedEmotion === "Neutral" && (
-            <span style={{ fontSize: 12, color: "#475569" }}>← Select an emotion to enable AI rewrite</span>
+            <span style={{ fontSize: 12, color: "#475569" }}>â† Select an emotion to enable AI rewrite</span>
           )}
           {!script.trim() && selectedEmotion !== "Neutral" && (
-            <span style={{ fontSize: 12, color: "#475569" }}>← Write a script first</span>
+            <span style={{ fontSize: 12, color: "#475569" }}>â† Write a script first</span>
           )}
         </div>
       </div>
@@ -1241,7 +1099,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
   const renderVoice = () => (
     <div style={styles.card}>
       <div style={styles.sectionTitle}>Choose Your Voice</div>
-      <div style={styles.sectionSub}>12 distinct voices across accents — Indian, Indian-American & International. Click ▶ Test to hear each one.</div>
+      <div style={styles.sectionSub}>12 distinct voices across accents â€” Indian, Indian-American & International. Click â–¶ Test to hear each one.</div>
 
       {voiceError && (
         <div style={{
@@ -1301,7 +1159,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                           <span style={{ fontWeight: 700, fontSize: 14 }}>{v.label}</span>
                           <span style={{ fontSize: 13 }}>{v.flag}</span>
                         </div>
-                        <div style={{ color: "#64748b", fontSize: 10 }}>{v.accent} · {v.gender}</div>
+                        <div style={{ color: "#64748b", fontSize: 10 }}>{v.accent} Â· {v.gender}</div>
                       </div>
                     </div>
                     <span style={{
@@ -1318,10 +1176,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                     {v.desc}
                   </div>
 
-                  {/* Claude TTS voice badge */}
+                  {/* Open-source TTS badge */}
                   <div style={{ fontSize: 10, color: "#475569", marginBottom: isSelected ? 6 : 8, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 4 }}>
                     <span style={{ color: "#a78bfa" }}>✦</span>
-                    <span>Claude TTS · {v.claudeVoice}</span>
+                    <span>Open TTS · {v.model || "Hugging Face"}</span>
                   </div>
 
                   {/* Waveform when selected */}
@@ -1347,7 +1205,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                       setSelectedVoice(v);
                       setTimeout(() => handlePreview(v.sampleText, v), 50);
                     }}
-                  >{ttsLoading && selectedVoice.id === v.id ? "⏳ Loading…" : "▶ Test Voice"}</button>
+                  >{ttsLoading && selectedVoice.id === v.id ? "â³ Loadingâ€¦" : "â–¶ Test Voice"}</button>
                 </div>
               );
             })}
@@ -1398,7 +1256,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                         <span style={{ fontWeight: 700, fontSize: 14 }}>{v.label}</span>
                         <span style={{ fontSize: 13 }}>{v.flag}</span>
                       </div>
-                      <div style={{ color: "#64748b", fontSize: 10 }}>{v.accent} · {v.gender}</div>
+                      <div style={{ color: "#64748b", fontSize: 10 }}>{v.accent} Â· {v.gender}</div>
                     </div>
                   </div>
                   <span style={{
@@ -1415,8 +1273,8 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                 </div>
 
                 <div style={{ fontSize: 10, color: "#475569", marginBottom: isSelected ? 6 : 8, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ color: "#60a5fa" }}>✦</span>
-                  <span>Gemini TTS · {v.geminiVoice}</span>
+                  <span style={{ color: "#60a5fa" }}>âœ¦</span>
+                  <span>Gemini TTS Â· {v.geminiVoice}</span>
                 </div>
 
                 {isSelected && (
@@ -1440,7 +1298,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                     setSelectedVoice(v);
                     setTimeout(() => handlePreview(v.sampleText, v), 50);
                   }}
-                >{ttsLoading && selectedVoice.id === v.id ? "⏳ Loading…" : "▶ Test Gemini Voice"}</button>
+                >{ttsLoading && selectedVoice.id === v.id ? "â³ Loadingâ€¦" : "â–¶ Test Gemini Voice"}</button>
               </div>
             );
           })()}
@@ -1449,7 +1307,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 4 }}>
         {[
-          { label: "Playback Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}×` },
+          { label: "Playback Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}Ã—` },
         ].map(({ label, val, set, min, max, step, display }) => (
           <div key={label}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -1472,10 +1330,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
           opacity: ttsLoading ? 0.7 : 1,
           cursor: ttsLoading ? "wait" : "pointer",
         }} onClick={() => handlePreview()}>
-          {ttsLoading ? "⏳ Generating…" : previewActive ? "⏹ Stop" : "▶ Preview with Script"}
+          {ttsLoading ? "â³ Generatingâ€¦" : previewActive ? "â¹ Stop" : "â–¶ Preview with Script"}
         </button>
         <span style={{ fontSize: 12, color: "#a78bfa", display: "flex", alignItems: "center", gap: 5 }}>
-          <span>✦</span> Powered by Claude AI TTS — natural human voices
+          <span>✦</span> Powered by Hugging Face open-source TTS
         </span>
       </div>
     </div>
@@ -1523,12 +1381,12 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
         background: "rgba(96,165,250,0.06)", border: "1px solid rgba(96,165,250,0.15)",
         fontSize: 13, color: "#93c5fd",
       }}>
-        🎵 Music is AI-generated, royalty-free, and synced to your video duration
+        ðŸŽµ Music is AI-generated, royalty-free, and synced to your video duration
       </div>
     </div>
   );
 
-  // ── canvas-based MP4 export (renders avatar + waveform frames to canvas, exports via MediaRecorder) ──
+  // â”€â”€ canvas-based MP4 export (renders avatar + waveform frames to canvas, exports via MediaRecorder) â”€â”€
   const [shareToast, setShareToast] = useState(null); // {type:"success"|"error", msg}
   const [downloading, setDownloading] = useState(false);
   const [editingSection, setEditingSection] = useState(null); // "photo"|"script"|"voice"|"music"|null
@@ -1549,10 +1407,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
 
     const cx = w / 2, r = 110;
 
-    // ── Natural face movement ──────────────────────────────────
-    // Head bob: ±3px vertical sine tied to frame index
+    // â”€â”€ Natural face movement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Head bob: Â±3px vertical sine tied to frame index
     const headBob = Math.sin(frameIdx * 0.08) * 3;
-    // Breathing: gentle scale ±0.3%
+    // Breathing: gentle scale Â±0.3%
     const breathScale = 1 + Math.sin(frameIdx * (2 * Math.PI / 60)) * 0.003;
     // Blink: eyes close for 4 frames out of every 72
     const isBlinking = (frameIdx % 72) < 4;
@@ -1585,10 +1443,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       ctx.font = `${Math.round(scaledR * 0.73)}px serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("👤", cx, cy);
+      ctx.fillText("ðŸ‘¤", cx, cy);
     }
 
-    // ── Blink overlay ──────────────────────────────────────────
+    // â”€â”€ Blink overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (isBlinking) {
       // Dark band across upper-face (eye) region
       const eyeTop = cy - scaledR * 0.1;
@@ -1599,8 +1457,8 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       ctx.fill();
     }
 
-    // ── Lip sync mouth overlay ─────────────────────────────────
-    // FIX 1: scale mouthH by 6x so it's visible on canvas (was 12px max → 72px now)
+    // â”€â”€ Lip sync mouth overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // FIX 1: scale mouthH by 6x so it's visible on canvas (was 12px max â†’ 72px now)
     // FIX 2: position at 62% down the face circle (was 38% = forehead area)
     const scaledMouthH = mouthH * 6;
     if (scaledMouthH > 0) {
@@ -1622,8 +1480,8 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
     }
     ctx.restore();
 
-    // ── Organic waveform ──────────────────────────────────────
-    // FIX: was single sin(frameIdx * 0.4 + i * 0.4) — all bars move in lockstep
+    // â”€â”€ Organic waveform â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // FIX: was single sin(frameIdx * 0.4 + i * 0.4) â€” all bars move in lockstep
     // FIX: now per-bar phase offset + secondary frequency creates organic variance
     const bars = 32, barW = 5, gap = 4;
     const totalBarW = bars * (barW + gap) - gap;
@@ -1654,7 +1512,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
   const handleDownloadMP4 = async () => {
     if (downloading) return;
     setDownloading(true);
-    showToast("success", "Rendering video… this may take a moment");
+    showToast("success", "Rendering videoâ€¦ this may take a moment");
 
     try {
       const W = 960, H = 540, FPS = 24;
@@ -1662,7 +1520,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext("2d");
 
-      // Pre-load avatar image — imageUrl is now a base64 data URL (set by FileReader),
+      // Pre-load avatar image â€” imageUrl is now a base64 data URL (set by FileReader),
       // so no crossOrigin attribute needed and canvas drawImage won't taint or break.
       let imgEl = null;
       if (imageUrl) {
@@ -1670,7 +1528,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
           const el = new Image();
           el.onload = () => res(el);
           el.onerror = () => res(null);   // gracefully fall back to placeholder
-          el.src = imageUrl;              // data: URL — safe for canvas
+          el.src = imageUrl;              // data: URL â€” safe for canvas
         });
         // Extra guard: confirm image actually decoded (naturalWidth=0 means broken)
         if (!imgEl || imgEl.naturalWidth === 0) imgEl = null;
@@ -1690,7 +1548,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       const FRAMES = [0, 1, 2, 3, 2, 1];
       const durationSec = Math.max(3, Math.round(charCount / 15) + 1);
       const totalFrames = durationSec * FPS;
-      const label = `${selectedVoice.label} · ${selectedMusic.label} music · ${selectedEmotion}`;
+      const label = `${selectedVoice.label} Â· ${selectedMusic.label} music Â· ${selectedEmotion}`;
 
       for (let f = 0; f < totalFrames; f++) {
         const mouthFrameIdx = Math.floor(f / 2) % FRAMES.length;
@@ -1712,9 +1570,9 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast("success", "✅ Video downloaded!");
+      showToast("success", "âœ… Video downloaded!");
     } catch (err) {
-      showToast("error", "❌ Download failed: " + err.message);
+      showToast("error", "âŒ Download failed: " + err.message);
     } finally {
       setDownloading(false);
     }
@@ -1722,14 +1580,14 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
 
   const handleShare = async () => {
     const shareData = {
-      title: "VoiceSync AI — My AI Avatar Video",
-      text: `Check out my AI lip sync video made with VoiceSync AI!\nVoice: ${selectedVoice.label} (${selectedVoice.accent})\nScript: "${script.slice(0, 80)}${script.length > 80 ? "…" : ""}"`,
+      title: "VoiceSync AI â€” My AI Avatar Video",
+      text: `Check out my AI lip sync video made with VoiceSync AI!\nVoice: ${selectedVoice.label} (${selectedVoice.accent})\nScript: "${script.slice(0, 80)}${script.length > 80 ? "â€¦" : ""}"`,
       url: window.location.href,
     };
     if (navigator.share && navigator.canShare?.(shareData)) {
       try {
         await navigator.share(shareData);
-        showToast("success", "✅ Shared successfully!");
+        showToast("success", "âœ… Shared successfully!");
       } catch (e) {
         if (e.name !== "AbortError") showToast("error", "Share failed. Link copied instead.");
       }
@@ -1737,22 +1595,22 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
       // Fallback: copy rich text to clipboard
       try {
         await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
-        showToast("success", "📋 Link & details copied to clipboard!");
+        showToast("success", "ðŸ“‹ Link & details copied to clipboard!");
       } catch {
-        showToast("error", "❌ Could not copy to clipboard.");
+        showToast("error", "âŒ Could not copy to clipboard.");
       }
     }
   };
 
   const handleExportAudio = async () => {
-    showToast("success", "🎵 Generating natural audio with Claude TTS…");
+    showToast("success", "🎵 Generating audio with Hugging Face TTS…");
     await handlePreview(script || "No script provided.");
   };
 
   // STEP 4: Generate / Preview
   const renderGenerate = () => (
     <div>
-      {/* ── Toast notification ── */}
+      {/* â”€â”€ Toast notification â”€â”€ */}
       {shareToast && (
         <div style={{
           position: "fixed", top: 24, right: 24, zIndex: 9999,
@@ -1764,7 +1622,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
         }}>{shareToast.msg}</div>
       )}
 
-      {/* ── Review & Edit panel ── */}
+      {/* â”€â”€ Review & Edit panel â”€â”€ */}
       {!generating && !generated && (
         <div style={{ ...styles.card, marginBottom: 20 }}>
           <div style={styles.sectionTitle}>Review & Edit</div>
@@ -1777,14 +1635,14 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {imageUrl
                   ? <img src={imageUrl} alt="Avatar" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(167,139,250,0.4)" }} />
-                  : <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#1e1b4b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>👤</div>
+                  : <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#1e1b4b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>ðŸ‘¤</div>
                 }
                 <div style={{ flex: 1 }}>
                   <div style={reviewLabelStyle}>PHOTO / AVATAR</div>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{image?.name || "No photo"}</div>
                 </div>
                 <button style={editBtnStyle} onClick={() => { fileInputRef.current?.click(); }}>
-                  ✏ Change Photo
+                  âœ Change Photo
                 </button>
                 <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
                   onChange={e => { handleImageUpload(e.target.files[0]); }} />
@@ -1808,10 +1666,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                       {script || <span style={{ color: "#475569" }}>No script written</span>}
                     </div>
                   }
-                  <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>{charCount}/1000 chars · ~{Math.max(1, Math.round(charCount / 15))}s</div>
+                  <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>{charCount}/1000 chars Â· ~{Math.max(1, Math.round(charCount / 15))}s</div>
                 </div>
                 <button style={editBtnStyle} onClick={() => setEditingSection(editingSection === "script" ? null : "script")}>
-                  {editingSection === "script" ? "✓ Done" : "✏ Edit"}
+                  {editingSection === "script" ? "âœ“ Done" : "âœ Edit"}
                 </button>
               </div>
             </div>
@@ -1844,7 +1702,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                         {[
-                          { label: "Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}×` },
+                          { label: "Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}Ã—` },
                         ].map(({ label, val, set, min, max, step, display }) => (
                           <div key={label}>
                             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -1861,13 +1719,13 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                     <div style={{ fontWeight: 600, fontSize: 14, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
                       <span>{selectedVoice.emoji}</span>
                       <span>{selectedVoice.label}</span>
-                      <span style={{ color: "#64748b", fontWeight: 400, fontSize: 12 }}>· {selectedVoice.accent} · {voiceSpeed.toFixed(1)}× speed</span>
+                      <span style={{ color: "#64748b", fontWeight: 400, fontSize: 12 }}>Â· {selectedVoice.accent} Â· {voiceSpeed.toFixed(1)}Ã— speed</span>
                       <span style={{ fontSize: 12 }}>{selectedVoice.flag}</span>
                     </div>
                   )}
                 </div>
                 <button style={{ ...editBtnStyle, marginLeft: 12, flexShrink: 0 }} onClick={() => setEditingSection(editingSection === "voice" ? null : "voice")}>
-                  {editingSection === "voice" ? "✓ Done" : "✏ Edit"}
+                  {editingSection === "voice" ? "âœ“ Done" : "âœ Edit"}
                 </button>
               </div>
             </div>
@@ -1896,7 +1754,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                   )}
                 </div>
                 <button style={{ ...editBtnStyle, marginLeft: 12, flexShrink: 0 }} onClick={() => setEditingSection(editingSection === "emotion" ? null : "emotion")}>
-                  {editingSection === "emotion" ? "✓ Done" : "✏ Edit"}
+                  {editingSection === "emotion" ? "âœ“ Done" : "âœ Edit"}
                 </button>
               </div>
             </div>
@@ -1937,24 +1795,24 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                   ) : (
                     <div style={{ fontWeight: 600, fontSize: 14, marginTop: 2 }}>
                       {selectedMusic.icon} {selectedMusic.label}
-                      {selectedMusic.id !== "none" && <span style={{ color: "#64748b", fontWeight: 400, fontSize: 12 }}> · {musicVolume}% volume</span>}
+                      {selectedMusic.id !== "none" && <span style={{ color: "#64748b", fontWeight: 400, fontSize: 12 }}> Â· {musicVolume}% volume</span>}
                     </div>
                   )}
                 </div>
                 <button style={{ ...editBtnStyle, marginLeft: 12, flexShrink: 0 }} onClick={() => setEditingSection(editingSection === "music" ? null : "music")}>
-                  {editingSection === "music" ? "✓ Done" : "✏ Edit"}
+                  {editingSection === "music" ? "âœ“ Done" : "âœ Edit"}
                 </button>
               </div>
             </div>
           </div>
 
           <button style={{ ...styles.primaryBtn, width: "100%", justifyContent: "center", fontSize: 16 }} onClick={handleGenerate}>
-            ✨ Generate AI Video
+            âœ¨ Generate AI Video
           </button>
         </div>
       )}
 
-      {/* ── Generation progress ── */}
+      {/* â”€â”€ Generation progress â”€â”€ */}
       {generating && (
         <div style={{ ...styles.card, textAlign: "center" }}>
           <div style={{ position: "relative", display: "inline-block", marginBottom: 16 }}>
@@ -1967,24 +1825,24 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
             </div>
           </div>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{genStage}</div>
-          <div style={{ color: "#64748b", fontSize: 13 }}>Please wait while your video is being generated…</div>
+          <div style={{ color: "#64748b", fontSize: 13 }}>Please wait while your video is being generatedâ€¦</div>
         </div>
       )}
 
-      {/* ── Result screen ── */}
+      {/* â”€â”€ Result screen â”€â”€ */}
       {generated && !generating && (
         <div>
           {/* Video player card */}
           <div style={{ ...styles.card, marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
-                <div style={{ fontSize: 20, fontWeight: 800 }}>🎉 Your Video is Ready!</div>
-                <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>AI lip sync video generated · Click play to preview</div>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>ðŸŽ‰ Your Video is Ready!</div>
+                <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>AI lip sync video generated Â· Click play to preview</div>
               </div>
               <button style={{
                 ...styles.secondaryBtn, fontSize: 13, padding: "8px 16px",
               }} onClick={() => { setGenerated(false); setGenerating(false); setEditingSection(null); }}>
-                ✏ Edit Settings
+                âœ Edit Settings
               </button>
             </div>
 
@@ -2000,7 +1858,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                 <LipSyncFace speaking={speaking} imageUrl={imageUrl} />
                 <div style={{ marginTop: 16 }}><Waveform active={speaking} color="#a78bfa" /></div>
                 <div style={{ marginTop: 12, color: "#64748b", fontSize: 12 }}>
-                  {selectedVoice.emoji} {selectedVoice.label} · {selectedMusic.icon} {selectedMusic.label} · {selectedEmotion}
+                  {selectedVoice.emoji} {selectedVoice.label} Â· {selectedMusic.icon} {selectedMusic.label} Â· {selectedEmotion}
                 </div>
               </div>
               {/* Play/Stop overlay */}
@@ -2016,7 +1874,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                     background: "rgba(124,58,237,0.85)", display: "flex",
                     alignItems: "center", justifyContent: "center", fontSize: 24,
                     backdropFilter: "blur(8px)", boxShadow: "0 0 30px rgba(124,58,237,0.5)",
-                  }}>▶</div>
+                  }}>â–¶</div>
                 )}
                 {speaking && (
                   <div style={{
@@ -2024,7 +1882,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                     background: "rgba(239,68,68,0.85)", borderRadius: 8,
                     padding: "6px 14px", fontSize: 12, fontWeight: 700, color: "#fff",
                     backdropFilter: "blur(8px)",
-                  }}>⏹ Stop</div>
+                  }}>â¹ Stop</div>
                 )}
               </button>
             </div>
@@ -2039,8 +1897,8 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                 onClick={handleDownloadMP4}
                 disabled={downloading}
               >
-                <span style={{ fontSize: 20 }}>⬇</span>
-                <span style={{ fontSize: 12 }}>{downloading ? "Rendering…" : "Download Video"}</span>
+                <span style={{ fontSize: 20 }}>â¬‡</span>
+                <span style={{ fontSize: 12 }}>{downloading ? "Renderingâ€¦" : "Download Video"}</span>
               </button>
               <button
                 style={{
@@ -2049,7 +1907,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                 }}
                 onClick={handleShare}
               >
-                <span style={{ fontSize: 20 }}>🔗</span>
+                <span style={{ fontSize: 20 }}>ðŸ”—</span>
                 <span style={{ fontSize: 12 }}>Share Link</span>
               </button>
               <button
@@ -2059,7 +1917,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                 }}
                 onClick={handleExportAudio}
               >
-                <span style={{ fontSize: 20 }}>🎵</span>
+                <span style={{ fontSize: 20 }}>ðŸŽµ</span>
                 <span style={{ fontSize: 12 }}>Play Audio</span>
               </button>
             </div>
@@ -2070,20 +1928,20 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(script);
-                  showToast("success", "📋 Script copied to clipboard!");
-                } catch { showToast("error", "❌ Could not copy script."); }
+                  showToast("success", "ðŸ“‹ Script copied to clipboard!");
+                } catch { showToast("error", "âŒ Could not copy script."); }
               }}
-            >📋 Copy Script to Clipboard</button>
+            >ðŸ“‹ Copy Script to Clipboard</button>
           </div>
 
           {/* Metadata badges */}
           <div style={{ ...styles.card, padding: "16px 20px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
               {[
-                { icon: "📹", label: "WebM / VP9", sub: "Best browser quality" },
-                { icon: "🎙", label: selectedVoice.label, sub: selectedVoice.accent },
-                { icon: "🎵", label: selectedMusic.label, sub: `${selectedMusic.id !== "none" ? musicVolume + "% vol" : "Off"}` },
-                { icon: "🔒", label: "Private", sub: "Stored locally" },
+                { icon: "ðŸ“¹", label: "WebM / VP9", sub: "Best browser quality" },
+                { icon: "ðŸŽ™", label: selectedVoice.label, sub: selectedVoice.accent },
+                { icon: "ðŸŽµ", label: selectedMusic.label, sub: `${selectedMusic.id !== "none" ? musicVolume + "% vol" : "Off"}` },
+                { icon: "ðŸ”’", label: "Private", sub: "Stored locally" },
               ].map(({ icon, label, sub }) => (
                 <div key={label} style={{
                   textAlign: "center", padding: "10px 8px", borderRadius: 10,
@@ -2107,11 +1965,11 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                   setSelectedVoice(VOICES[0]); setVoiceSpeed(1.0);
                   setEditingSection(null); setTtsCache({});
                 }}
-              >🔄 Start New Video</button>
+              >ðŸ”„ Start New Video</button>
               <button
                 style={{ ...styles.secondaryBtn, flex: 1, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 onClick={() => { setGenerated(false); setGenerating(false); setEditingSection(null); }}
-              >✏ Edit & Regenerate</button>
+              >âœ Edit & Regenerate</button>
             </div>
           </div>
         </div>
@@ -2119,7 +1977,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
     </div>
   );
 
-  // ── Inline review row helpers ──
+  // â”€â”€ Inline review row helpers â”€â”€
   const reviewRowStyle = (active) => ({
     padding: "14px 16px", borderRadius: 12,
     background: active ? "rgba(124,58,237,0.1)" : "rgba(255,255,255,0.03)",
@@ -2165,10 +2023,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.logo}>
-            <div style={styles.logoIcon}>🎙</div>
+            <div style={styles.logoIcon}>ðŸŽ™</div>
             <div>
               <div style={styles.logoText}>VoiceSync AI</div>
-              <div style={{ fontSize: 11, color: "#475569", letterSpacing: 0.5 }}>Powered by Claude</div>
+              <div style={{ fontSize: 11, color: "#475569", letterSpacing: 0.5 }}>Powered by Hugging Face TTS</div>
             </div>
           </div>
           <span style={styles.badge}>Beta</span>
@@ -2177,10 +2035,10 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
         {/* Feature badges */}
         <div style={{ display: "flex", gap: 10, marginBottom: 32, flexWrap: "wrap" }}>
           {[
-            { icon: "🧬", label: "Lip Sync AI" },
-            { icon: "🎙", label: "Voice Clone" },
-            { icon: "🎵", label: "AI Music" },
-            { icon: "⚡", label: "Real-time Gen" },
+            { icon: "ðŸ§¬", label: "Lip Sync AI" },
+            { icon: "ðŸŽ™", label: "Voice Clone" },
+            { icon: "ðŸŽµ", label: "AI Music" },
+            { icon: "âš¡", label: "Real-time Gen" },
           ].map(({ icon, label }) => (
             <div key={label} style={{
               display: "flex", alignItems: "center", gap: 6,
@@ -2199,14 +2057,14 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
             <div key={s} style={{ display: "flex", alignItems: "center" }}>
               <div style={styles.stepDot(step === i, step > i)}
                 onClick={() => step > i && setStep(i)}>
-                {step > i ? "✓" : i + 1}
+                {step > i ? "âœ“" : i + 1}
               </div>
               {i < STEPS.length - 1 && <div style={styles.stepLine(step > i)} />}
             </div>
           ))}
         </div>
         <div style={{ textAlign: "center", marginBottom: 24, color: "#a78bfa", fontWeight: 700, fontSize: 13, letterSpacing: 1, textTransform: "uppercase" }}>
-          Step {step + 1} — {STEPS[step]}
+          Step {step + 1} â€” {STEPS[step]}
         </div>
 
         {/* Step content */}
@@ -2217,7 +2075,7 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
           <button
             style={{ ...styles.secondaryBtn, visibility: step === 0 ? "hidden" : "visible" }}
             onClick={() => setStep(s => s - 1)}
-          >← Back</button>
+          >â† Back</button>
           {step < STEPS.length - 1 && (
             <button
               style={{
@@ -2226,10 +2084,16 @@ Return ONLY the rewritten script text — no preamble, no quotes, no explanation
                 cursor: canProceed[step] ? "pointer" : "not-allowed",
               }}
               onClick={() => canProceed[step] && setStep(s => s + 1)}
-            >Continue →</button>
+            >Continue â†’</button>
           )}
         </div>
       </div>
     </div>
   );
 }
+
+
+
+
+
+

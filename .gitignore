@@ -23,3 +23,5 @@ lint-report*.txt
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
