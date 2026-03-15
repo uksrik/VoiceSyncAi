@@ -1856,7 +1856,7 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
               </button>
             </div>
 
-            {            {/* Video viewport */}
+            {/* Video viewport */}
             <div style={{
               background: "#000", borderRadius: 16, overflow: "hidden",
               aspectRatio: "16/9", display: "flex", alignItems: "center",
@@ -1902,7 +1902,8 @@ Return ONLY the rewritten script text â€” no preamble, no quotes, no explan
                   </button>
                 </>
               )}
-            </div>/* Action buttons */}
+            </div>
+            {/* Action buttons */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
               <button
                 style={{
