@@ -441,7 +441,8 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [image, setImage] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
-  const [videoUrl, setVideoUrl] = useState(SAMPLE_VIDEO_URL);
+  const [sourceMode, setSourceMode] = useState("photo");
+  const [videoUrl, setVideoUrl] = useState("");
   const [lipSyncVideoUrl, setLipSyncVideoUrl] = useState(null);
   const [lipSyncLoading, setLipSyncLoading] = useState(false);
   const [script, setScript] = useState("");
@@ -560,18 +561,73 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
     return data.audioUrl;
   }, [ttsCache, selectedEmotion, voiceSmoothness]);
 
+  const createStillVideoDataUrl = useCallback(async (imgUrl) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = imgUrl;
+    await img.decode();
+
+    const size = 720;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported");
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, size, size);
+
+    const scale = Math.max(size / img.width, size / img.height);
+    const w = img.width * scale;
+    const h = img.height * scale;
+    const x = (size - w) / 2;
+    const y = (size - h) / 2;
+    ctx.drawImage(img, x, y, w, h);
+
+    const stream = canvas.captureStream(30);
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : "video/webm";
+    const recorder = new MediaRecorder(stream, { mimeType });
+    const chunks = [];
+
+    const stopped = new Promise((resolve, reject) => {
+      recorder.onstop = () => resolve();
+      recorder.onerror = (e) => reject(e.error || new Error("Recorder failed"));
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+    });
+
+    recorder.start();
+    await new Promise(r => setTimeout(r, 1200));
+    recorder.stop();
+    await stopped;
+    stream.getTracks().forEach(t => t.stop());
+
+    const blob = new Blob(chunks, { type: mimeType });
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error("Video encode failed"));
+      reader.readAsDataURL(blob);
+    });
+  }, []);
+
   const runLipsync = useCallback(async (audioDataUrl) => {
-    if (!videoUrl.trim()) return;
     setLipSyncLoading(true);
     try {
+      const payload = { audioDataUrl, syncMode: "cut_off" };
+      if (sourceMode === "video") {
+        if (!videoUrl.trim()) throw new Error("Video URL is required");
+        payload.videoUrl = videoUrl.trim();
+      } else {
+        if (!imageUrl) throw new Error("Photo is required");
+        payload.videoDataUrl = await createStillVideoDataUrl(imageUrl);
+      }
       const res = await fetch("/api/lipsync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          audioDataUrl,
-          videoUrl: videoUrl.trim(),
-          syncMode: "cut_off",
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Lipsync API ${res.status}`);
@@ -582,7 +638,7 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
     } finally {
       setLipSyncLoading(false);
     }
-  }, [videoUrl]);
+  }, [videoUrl, imageUrl, sourceMode, createStillVideoDataUrl]);
 
   const connectSmoothedAudio = useCallback(async (audio) => {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -649,6 +705,14 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
     const text = textOverride || script;
     const voice = voiceOverride || selectedVoice;
     if (!text.trim()) return;
+    if (sourceMode === "photo" && !imageUrl) {
+      setVoiceError("Upload a photo to preview.");
+      return;
+    }
+    if (sourceMode === "video" && !videoUrl.trim()) {
+      setVoiceError("Provide a video URL to preview.");
+      return;
+    }
 
     setVoiceError(null);
     setTtsLoading(true);
@@ -686,10 +750,10 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
     } finally {
       setTtsLoading(false);
     }
-  }, [previewActive, script, selectedVoice, voiceSpeed, callOpenTTS, connectSmoothedAudio, stopAudio, runLipsync]);
+  }, [previewActive, script, selectedVoice, voiceSpeed, callOpenTTS, connectSmoothedAudio, stopAudio, runLipsync, sourceMode, imageUrl, videoUrl]);
 
   useEffect(() => { setCharCount(script.length); }, [script]);
-  useEffect(() => { setLipSyncVideoUrl(null); }, [videoUrl, script, selectedVoice]);
+  useEffect(() => { setLipSyncVideoUrl(null); }, [videoUrl, imageUrl, script, selectedVoice, sourceMode]);
 
   const handleImageUpload = (file) => {
     if (!file) return;
@@ -709,6 +773,14 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
   }, []);
 
   const handleGenerate = async () => {
+    if (sourceMode === "photo" && !imageUrl) {
+      setVoiceError("Upload a photo to generate.");
+      return;
+    }
+    if (sourceMode === "video" && !videoUrl.trim()) {
+      setVoiceError("Provide a video URL to generate.");
+      return;
+    }
     setGenerating(true);
     setGenProgress(0);
     setLipSyncVideoUrl(null);
@@ -743,7 +815,7 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
   };
 
   const canProceed = [
-    videoUrl.trim().length > 0,
+    sourceMode === "video" ? videoUrl.trim().length > 0 : !!imageUrl,
     script.trim().length > 10,
     true,
     true,
@@ -946,29 +1018,88 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
   // STEP 0: Upload
   const renderUpload = () => (
     <div style={styles.card}>
-      <div style={styles.sectionTitle}>Link a Source Video</div>
-      <div style={styles.sectionSub}>Paste a publicly accessible MP4/MOV URL; Sync Lipsync 2.0 Pro will align it to your generated audio.</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
-        <input
-          type="url"
-          placeholder="https://example.com/face-shot.mp4"
-          value={videoUrl}
-          onChange={e => setVideoUrl(e.target.value)}
+      <div style={styles.sectionTitle}>Choose a Source</div>
+      <div style={styles.sectionSub}>Upload a photo to animate, or provide a video URL for direct lipsync.</div>
+
+      <div style={{ display: "flex", gap: 8, margin: "12px 0 16px" }}>
+        <button
           style={{
-            width: "100%",
-            padding: "14px 16px",
-            borderRadius: 12,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(255,255,255,0.02)",
-            color: "#e2e8f0",
-            fontSize: 15,
+            ...styles.secondaryBtn,
+            padding: "8px 16px",
+            background: sourceMode === "photo" ? "rgba(124,58,237,0.25)" : "rgba(255,255,255,0.06)",
+            border: sourceMode === "photo" ? "1px solid rgba(124,58,237,0.6)" : "1px solid rgba(255,255,255,0.1)",
           }}
-        />
-        <div style={{ color: "#94a3b8", fontSize: 12 }}>
-          Tip: use a short, front-facing clip hosted on Cloudflare R2/S3/Dropbox/etc. The URL must be reachable without auth.
-        </div>
-        <div style={{ color: "#a78bfa", fontSize: 12 }}>A demo clip is preloaded so you can continue right away.</div>
+          onClick={() => setSourceMode("photo")}
+        >Photo</button>
+        <button
+          style={{
+            ...styles.secondaryBtn,
+            padding: "8px 16px",
+            background: sourceMode === "video" ? "rgba(124,58,237,0.25)" : "rgba(255,255,255,0.06)",
+            border: sourceMode === "video" ? "1px solid rgba(124,58,237,0.6)" : "1px solid rgba(255,255,255,0.1)",
+          }}
+          onClick={() => setSourceMode("video")}
+        >Video URL</button>
       </div>
+
+      {sourceMode === "photo" ? (
+        <div
+          style={styles.dropzone(dragOver)}
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
+            onChange={e => handleImageUpload(e.target.files[0])} />
+          {imageUrl ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+              <img src={imageUrl} alt="Uploaded" style={{
+                width: 160, height: 160, borderRadius: "50%", objectFit: "cover",
+                border: "3px solid rgba(167,139,250,0.5)",
+                boxShadow: "0 0 30px rgba(124,58,237,0.3)",
+              }} />
+              <div style={{ color: "#a78bfa", fontWeight: 700 }}>Photo uploaded</div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>Click to replace</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Drop your photo here</div>
+              <div style={{ color: "#64748b", fontSize: 14, marginBottom: 16 }}>or click to browse</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                {["JPG", "PNG", "WEBP", "HEIC"].map(f => (
+                  <span key={f} style={styles.tag}>{f}</span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 6 }}>
+          <input
+            type="url"
+            placeholder="https://example.com/face-shot.mp4"
+            value={videoUrl}
+            onChange={e => setVideoUrl(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "14px 16px",
+              borderRadius: 12,
+              border: "1px solid rgba(148,163,184,0.25)",
+              background: "rgba(255,255,255,0.02)",
+              color: "#e2e8f0",
+              fontSize: 15,
+            }}
+          />
+          <div style={{ color: "#94a3b8", fontSize: 12 }}>
+            Tip: use a short, front-facing clip hosted on Cloudflare R2/S3/Dropbox/etc. The URL must be reachable without auth.
+          </div>
+          <button
+            style={{ ...styles.secondaryBtn, padding: "8px 16px", alignSelf: "flex-start" }}
+            onClick={() => setVideoUrl(SAMPLE_VIDEO_URL)}
+          >Use demo clip</button>
+        </div>
+      )}
     </div>
   );
 
@@ -1978,7 +2109,8 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
                 onClick={() => {
                   stopAudio();
                   setGenerated(false); setStep(0);
-                  setImage(null); setImageUrl(null); setVideoUrl(SAMPLE_VIDEO_URL); setLipSyncVideoUrl(null);
+                  setImage(null); setImageUrl(null); setVideoUrl(""); setLipSyncVideoUrl(null);
+                  setSourceMode("photo");
                   setScript("");
                   setSpeaking(false); setPreviewActive(false);
                   setSelectedVoice(VOICES[0]); setVoiceSpeed(1.0);

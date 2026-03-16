@@ -4,7 +4,7 @@ import { fal } from "@fal-ai/client";
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: "8mb",
+      sizeLimit: "16mb",
     },
   },
 };
@@ -25,9 +25,15 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-    const { audioDataUrl, videoUrl, syncMode = "cut_off", model = "lipsync-2-pro" } = body;
-    if (!audioDataUrl || !videoUrl) {
-      return res.status(400).json({ error: "audioDataUrl and videoUrl are required" });
+    const {
+      audioDataUrl,
+      videoUrl,
+      videoDataUrl,
+      syncMode = "cut_off",
+      model = "lipsync-2-pro",
+    } = body;
+    if (!audioDataUrl || (!videoUrl && !videoDataUrl)) {
+      return res.status(400).json({ error: "audioDataUrl and a video source are required" });
     }
     if (!process.env.FAL_KEY) {
       return res.status(500).json({ error: "Missing FAL_KEY environment variable" });
@@ -40,10 +46,18 @@ export default async function handler(req, res) {
     const audioBlob = new Blob([parsed.buffer], { type: parsed.mime });
     const audio_url = await fal.storage.upload(audioBlob, { expiresIn: "24h" });
 
+    let video_url = videoUrl;
+    if (!video_url && videoDataUrl) {
+      const videoParsed = parseDataUrl(videoDataUrl);
+      if (!videoParsed) return res.status(400).json({ error: "Invalid video data URL" });
+      const videoBlob = new Blob([videoParsed.buffer], { type: videoParsed.mime });
+      video_url = await fal.storage.upload(videoBlob, { expiresIn: "24h" });
+    }
+
     const result = await fal.subscribe("fal-ai/sync-lipsync/v2", {
       input: {
         model,
-        video_url: videoUrl,
+        video_url,
         audio_url,
         sync_mode: syncMode,
       },
