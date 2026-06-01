@@ -17,6 +17,13 @@ const parseDataUrl = (dataUrl) => {
   return { mime: match[1], buffer: Buffer.from(match[2], "base64") };
 };
 
+const uploadDataUrl = async (dataUrl, errorLabel) => {
+  const parsed = parseDataUrl(dataUrl);
+  if (!parsed) throw new Error(`Invalid ${errorLabel} data URL`);
+  const blob = new Blob([parsed.buffer], { type: parsed.mime });
+  return await fal.storage.upload(blob, { expiresIn: "24h" });
+};
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -27,31 +34,46 @@ export default async function handler(req, res) {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
     const {
       audioDataUrl,
+      imageDataUrl,
       videoUrl,
       videoDataUrl,
       syncMode = "cut_off",
       model = "lipsync-2-pro",
+      prompt = "A realistic talking head video with natural facial expressions, subtle head movement, eye blinks, and accurate lip synchronization.",
     } = body;
-    if (!audioDataUrl || (!videoUrl && !videoDataUrl)) {
-      return res.status(400).json({ error: "audioDataUrl and a video source are required" });
+    if (!audioDataUrl || (!imageDataUrl && !videoUrl && !videoDataUrl)) {
+      return res.status(400).json({ error: "audioDataUrl and an image or video source are required" });
     }
     if (!process.env.FAL_KEY) {
       return res.status(500).json({ error: "Missing FAL_KEY environment variable" });
     }
 
-    const parsed = parseDataUrl(audioDataUrl);
-    if (!parsed) return res.status(400).json({ error: "Invalid audio data URL" });
+    const audio_url = await uploadDataUrl(audioDataUrl, "audio");
 
-    // Upload audio to fal storage to obtain a URL usable by the model.
-    const audioBlob = new Blob([parsed.buffer], { type: parsed.mime });
-    const audio_url = await fal.storage.upload(audioBlob, { expiresIn: "24h" });
+    if (imageDataUrl) {
+      const image_url = await uploadDataUrl(imageDataUrl, "image");
+      const result = await fal.subscribe("fal-ai/ai-avatar", {
+        input: {
+          image_url,
+          audio_url,
+          prompt,
+        },
+        logs: true,
+      });
+
+      const outputUrl = result?.data?.video?.url;
+      if (!outputUrl) return res.status(500).json({ error: "No video returned from talking avatar model" });
+
+      return res.status(200).json({
+        videoUrl: outputUrl,
+        requestId: result.requestId,
+        provider: "fal-ai/ai-avatar",
+      });
+    }
 
     let video_url = videoUrl;
     if (!video_url && videoDataUrl) {
-      const videoParsed = parseDataUrl(videoDataUrl);
-      if (!videoParsed) return res.status(400).json({ error: "Invalid video data URL" });
-      const videoBlob = new Blob([videoParsed.buffer], { type: videoParsed.mime });
-      video_url = await fal.storage.upload(videoBlob, { expiresIn: "24h" });
+      video_url = await uploadDataUrl(videoDataUrl, "video");
     }
 
     const result = await fal.subscribe("fal-ai/sync-lipsync/v2", {
@@ -67,7 +89,11 @@ export default async function handler(req, res) {
     const outputUrl = result?.data?.video?.url;
     if (!outputUrl) return res.status(500).json({ error: "No video returned from lipsync" });
 
-    return res.status(200).json({ videoUrl: outputUrl, requestId: result.requestId });
+    return res.status(200).json({
+      videoUrl: outputUrl,
+      requestId: result.requestId,
+      provider: "fal-ai/sync-lipsync/v2",
+    });
   } catch (err) {
     console.error("Lipsync API error", err);
     return res.status(500).json({ error: err.message || "Lipsync failed" });

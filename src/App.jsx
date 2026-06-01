@@ -1,4 +1,5 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { prepareAudioDataUrl } from "./audioUtils.js";
 
 const MUSIC_GENRES = [
   { id: "cinematic", label: "Cinematic", icon: "", desc: "Epic orchestral" },
@@ -195,84 +196,250 @@ const VOICE_GROUPS = [
   },
 ];
 
-// Flat list for easy lookup by id
-const VOICES = VOICE_GROUPS.flatMap(g => g.voices);
-
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim();
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY?.trim();
 const SAMPLE_VIDEO_URL = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-const OPEN_TTS_VOICES = [
+const GEMINI_VOICE = null;
+
+/** Maps persona voice ids to high-quality MiniMax preset voices (human-like, not robotic). */
+const FAL_VOICE_PRESETS = {
+  priya: "English_CalmWoman",
+  arjun: "English_Trustworthy_Man",
+  kavya: "English_FriendlyPerson",
+  vikram: "English_Deep_Voice_Man",
+  lakshmi: "English_CalmWoman",
+  krishna: "English_Trustworthy_Man",
+  divya: "English_FriendlyPerson",
+  meenakshi: "Wise_Woman",
+  murugan: "English_Deep_Voice_Man",
+  kavitha: "English_CalmWoman",
+  ananya: "English_FriendlyPerson",
+  rohan: "English_Trustworthy_Man",
+  nova: "English_FriendlyPerson",
+  echo: "English_WiseScholar",
+  aria: "English_Aussie_Bloke",
+  orion: "English_Deep_Voice_Man",
+  sage: "English_PassionateWarrior",
+  atlas: "English_WiseScholar",
+};
+
+function attachNaturalTts(voice, falVoiceId, options = {}) {
+  const isMale = voice.gender === "male";
+  const fallbackVoiceName = options.fallbackVoiceName || (isMale ? "Microsoft Guy" : "Microsoft Jenny");
+  return {
+    ...voice,
+    provider: "fal-minimax",
+    falVoiceId,
+    pitch: options.pitch ?? 0,
+    speed: options.speed ?? 0.98,
+    languageBoost: options.languageBoost ?? "English",
+    voiceName: fallbackVoiceName,
+    rate: options.rate ?? -3,
+    flag: voice.flag || "AI",
+    sampleText: voice.sampleText || `Hi, I'm ${voice.label}. This is my natural speaking voice.`,
+  };
+}
+
+const PERSONA_VOICES = VOICE_GROUPS.flatMap(g => g.voices).map(v =>
+  attachNaturalTts(v, FAL_VOICE_PRESETS[v.id] || "English_FriendlyPerson")
+);
+
+const PREMIUM_NATURAL_VOICES = [
+  attachNaturalTts(
+    {
+      id: "emma-calm",
+      label: "Emma",
+      gender: "female",
+      style: "Soft & Conversational",
+      accent: "US English",
+      desc: "Relaxed, warm narrator ideal for explainers and tutorials.",
+    },
+    "English_CalmWoman",
+    { speed: 0.96 }
+  ),
+  attachNaturalTts(
+    {
+      id: "james-trust",
+      label: "James",
+      gender: "male",
+      style: "Clear & Trustworthy",
+      accent: "US English",
+      desc: "Steady professional tone for business and product videos.",
+    },
+    "English_Trustworthy_Man"
+  ),
+  attachNaturalTts(
+    {
+      id: "olivia-warm",
+      label: "Olivia",
+      gender: "female",
+      style: "Friendly & Bright",
+      accent: "US English",
+      desc: "Approachable, upbeat delivery for marketing and social content.",
+    },
+    "English_FriendlyPerson",
+    { speed: 1.02 }
+  ),
+  attachNaturalTts(
+    {
+      id: "henry-wise",
+      label: "Henry",
+      gender: "male",
+      style: "Documentary",
+      accent: "British",
+      desc: "Measured, authoritative read for storytelling and education.",
+    },
+    "English_WiseScholar",
+    { speed: 0.94 }
+  ),
+  attachNaturalTts(
+    {
+      id: "liam-aussie",
+      label: "Liam",
+      gender: "male",
+      style: "Casual Australian",
+      accent: "Australian",
+      desc: "Easy-going conversational Australian tone.",
+    },
+    "English_Aussie_Bloke",
+    { speed: 1.0 }
+  ),
+  attachNaturalTts(
+    {
+      id: "sophia-bold",
+      label: "Sophia",
+      gender: "female",
+      style: "Energetic Presenter",
+      accent: "US English",
+      desc: "Dynamic, expressive voice for launches and hype reels.",
+    },
+    "English_PassionateWarrior",
+    { speed: 1.05 }
+  ),
+  attachNaturalTts(
+    {
+      id: "marcus-deep",
+      label: "Marcus",
+      gender: "male",
+      style: "Rich Baritone",
+      accent: "US English",
+      desc: "Deep, cinematic voice for trailers and dramatic reads.",
+    },
+    "English_Deep_Voice_Man",
+    { speed: 0.92 }
+  ),
+  attachNaturalTts(
+    {
+      id: "grace-narrator",
+      label: "Grace",
+      gender: "female",
+      style: "Elegant Narrator",
+      accent: "Global English",
+      desc: "Polished, audiobook-quality narration with natural flow.",
+    },
+    "Wise_Woman",
+    { speed: 0.95 }
+  ),
+];
+
+const WINDOWS_NATURAL_VOICES = [
   {
-    id: "ljspeech",
-    label: "LJSpeech (Female)",
+    id: "win-jenny",
+    label: "Jenny (Neural)",
     gender: "female",
-    style: "Warm and Clear",
+    style: "Natural US Female",
     accent: "US English",
-    model: "espnet/kan-bayashi_ljspeech_vits",
-    emoji: "",
-    desc: "Open VITS model trained on LJSpeech  friendly and clear for general narration.",
-    sampleText: "Hi there, I'm an open-source LJSpeech voice  natural, warm, and easy to listen to.",
-    flag: "OSS",
+    provider: "windows-speech",
+    voiceName: "Microsoft Jenny",
+    rate: -3,
+    desc: "Windows neural voice — smooth and human-like when offline.",
+    sampleText: "Hi, I'm Jenny. I sound natural and clear for everyday narration.",
+    flag: "LOCAL",
   },
   {
-    id: "vctk-p225",
-    label: "VCTK P225",
+    id: "win-guy",
+    label: "Guy (Neural)",
+    gender: "male",
+    style: "Natural US Male",
+    accent: "US English",
+    provider: "windows-speech",
+    voiceName: "Microsoft Guy",
+    rate: -3,
+    desc: "Windows neural male voice for offline previews and generation.",
+    sampleText: "Hello, I'm Guy. I deliver calm, natural speech for your videos.",
+    flag: "LOCAL",
+  },
+  {
+    id: "win-aria",
+    label: "Aria (Neural)",
     gender: "female",
-    style: "Bright and Precise",
-    accent: "UK English",
-    model: "espnet/kan-bayashi_vctk_single_p225",
-    emoji: "",
-    desc: "VITS single-speaker model (P225) from VCTK  crisp British delivery.",
-    sampleText: "Hello! This is the VCTK P225 voice with a bright British accent.",
-    flag: "OSS",
-  },
-  {
-    id: "vctk-p243",
-    label: "VCTK P243",
-    gender: "female",
-    style: "Soft and Calm",
-    accent: "UK English",
-    model: "espnet/kan-bayashi_vctk_single_p243",
-    emoji: "",
-    desc: "VITS single-speaker model (P243)  softer British tone for calming reads.",
-    sampleText: "I'm the VCTK P243 voice  softer, calming, and easy-going.",
-    flag: "OSS",
-  },
-  {
-    id: "mms-en",
-    label: "MMS English",
-    gender: "neutral",
-    style: "Balanced",
-    accent: "Global English",
-    model: "facebook/mms-tts-eng",
-    emoji: "",
-    desc: "Meta MMS open multilingual TTS  balanced global English pronunciation.",
-    sampleText: "This is the MMS English voice  balanced and globally understandable.",
-    flag: "OSS",
+    style: "Expressive US Female",
+    accent: "US English",
+    provider: "windows-speech",
+    voiceName: "Microsoft Aria",
+    rate: -2,
+    desc: "Expressive neural voice with a lively, natural cadence.",
+    sampleText: "Hi there, I'm Aria — expressive, warm, and easy to listen to.",
+    flag: "LOCAL",
   },
 ];
 
-const ACTIVE_VOICES = OPEN_TTS_VOICES;
+const ACTIVE_VOICES = [
+  ...PREMIUM_NATURAL_VOICES,
+  ...PERSONA_VOICES,
+  ...WINDOWS_NATURAL_VOICES,
+];
 
 const ACTIVE_VOICE_GROUPS = [
   {
-    group: "Open TTS Voices (Hugging Face)",
-    color: "#7c3aed",
-    voices: OPEN_TTS_VOICES,
+    group: "Premium Natural Voices",
+    color: "#a78bfa",
+    voices: PREMIUM_NATURAL_VOICES,
+  },
+  ...VOICE_GROUPS.map(g => ({
+    ...g,
+    voices: g.voices.map(v => PERSONA_VOICES.find(p => p.id === v.id)).filter(Boolean),
+  })),
+  {
+    group: "Local Natural Voices (Offline)",
+    color: "#10b981",
+    voices: WINDOWS_NATURAL_VOICES,
   },
 ];
 
-function getSmoothnessInstruction(value) {
-  if (value < 30) return "Keep the delivery natural and realistic.";
-  if (value < 60) return "Keep the delivery natural with softer consonants and gentler transitions.";
-  if (value < 80) return "Use a smooth, human cadence with rounded consonants, less harsh attack, and flowing transitions.";
-  return "Use an ultra-smooth studio cadence with rounded consonants, soft transitions, subtle breath flow, and avoid robotic pacing or metallic sharpness.";
-}
+const ALL_VOICES = ACTIVE_VOICES;
 
 const EMOTIONS = ["Neutral", "Happy", "Serious", "Excited", "Calm", "Inspirational"];
 
 const STEPS = ["Upload", "Script", "Voice", "Music", "Generate"];
+
+const CLONED_VOICES_KEY = "voicesync-cloned-voices";
+
+const loadStoredClonedVoices = () => {
+  try {
+    const raw = localStorage.getItem(CLONED_VOICES_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw).filter(v => v?.isCloned && v?.id);
+  } catch {
+    return [];
+  }
+};
+
+const saveStoredClonedVoices = (voices) => {
+  const slim = voices.map(({ id, label, customVoiceId, pitch, speed, emoji, accent, flag }) => ({
+    id,
+    label,
+    isCloned: true,
+    customVoiceId: customVoiceId || null,
+    pitch: pitch ?? 0,
+    speed: speed ?? 1,
+    emoji: emoji || "🎙️",
+    accent: accent || "Custom upload",
+    flag: flag || "✨",
+  }));
+  localStorage.setItem(CLONED_VOICES_KEY, JSON.stringify(slim));
+};
 
 // --- Animated waveform for lipsync preview ---
 function Waveform({ active, color = "#a78bfa" }) {
@@ -300,38 +467,35 @@ function Waveform({ active, color = "#a78bfa" }) {
   );
 }
 
-// --- Lip sync face animation ---
-// FIXES:
-//    Head bob: subtle sine-wave vertical movement (3px) tied to speaking frame
-//    Blink: eyes close for 4 frames every 72 frames (~3s at 24fps)
-//    Breathing: gentle scale pulse (0.3%) on a 60-frame cycle
-//    Mouth position: moved to 62% down the face (was 38%  was placing it on the forehead)
+// --- Fallback talking-photo preview ---
+// This is only a lightweight local preview for when a generated lipsync video is
+// not available yet. The real lipsync result is rendered by the fal video output.
 const LIP_FRAMES = [0, 1, 2, 3, 2, 1];
 
 function LipSyncFace({ speaking, imageUrl }) {
   const [frame, setFrame] = useState(0);
-  const [blinkFrame, setBlinkFrame] = useState(0);
+  const [motionFrame, setMotionFrame] = useState(0);
 
   useEffect(() => {
     if (!speaking) return;
     const id = setInterval(() => {
       setFrame(f => (f + 1) % LIP_FRAMES.length);
-      setBlinkFrame(b => b + 1);
+      setMotionFrame(b => b + 1);
     }, 80); // ~12fps for mouth animation
     return () => {
       clearInterval(id);
       setFrame(0);
-      setBlinkFrame(0);
+      setMotionFrame(0);
     };
   }, [speaking]);
 
   const mouthOpen = LIP_FRAMES[frame];
-  const mouthHeight = [0, 4, 8, 12, 8, 4][mouthOpen] || 0;
+  const mouthHeight = [3, 6, 10, 14, 10, 6][mouthOpen] || 3;
+  const mouthWidth = [34, 36, 38, 40, 38, 36][mouthOpen] || 34;
 
-  // Natural face movement  only animate when speaking
-  const headBob = speaking ? Math.sin(blinkFrame * 0.08) * 3 : 0;         // 3px vertical bob
-  const isBlinking = speaking && (blinkFrame % 72) < 4;                       // blink every ~3s
-  const breathScale = speaking ? 1 + Math.sin(blinkFrame * (2 * Math.PI / 60)) * 0.003 : 1; // subtle breathing
+  // Keep movement tiny so it does not look like the whole photo is wobbling.
+  const headBob = speaking ? Math.sin(motionFrame * 0.1) * 0.8 : 0;
+  const breathScale = speaking ? 1 + Math.sin(motionFrame * (2 * Math.PI / 80)) * 0.0015 : 1;
 
   const containerStyle = {
     transform: `translateY(${headBob.toFixed(2)}px) scale(${breathScale.toFixed(5)})`,
@@ -341,7 +505,7 @@ function LipSyncFace({ speaking, imageUrl }) {
   const faceCircleStyle = {
     width: 180, height: 180, borderRadius: "50%",
     overflow: "hidden", border: "3px solid rgba(167,139,250,0.5)",
-    boxShadow: speaking ? "0 0 30px rgba(167,139,250,0.6)" : "0 0 10px rgba(167,139,250,0.2)",
+    boxShadow: speaking ? "0 0 18px rgba(167,139,250,0.35)" : "0 0 10px rgba(167,139,250,0.2)",
     transition: "box-shadow 0.2s",
     position: "relative",
   };
@@ -354,26 +518,20 @@ function LipSyncFace({ speaking, imageUrl }) {
             <img src={imageUrl} alt="Avatar"
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
 
-            {/* Blink overlay  darkens eye region */}
-            {isBlinking && (
-              <div style={{
-                position: "absolute", top: "22%", left: "10%", width: "80%", height: "20%",
-                background: "rgba(0,0,0,0.55)", borderRadius: "0 0 50% 50%",
-                transition: "opacity 0.05s",
-              }} />
-            )}
-
-            {/* Lip sync mouth overlay  FIXED position: 62% down (was 38% = forehead) */}
+            {/* Subtle fallback mouth mask: lower-face only, no eye or waveform overlays. */}
             <div style={{
               position: "absolute",
-              bottom: "18%",             // 18% from bottom  chin area
+              bottom: "22%",
               left: "50%",
               transform: "translateX(-50%)",
-              width: 36,
+              width: mouthWidth,
               height: mouthHeight,
-              background: "rgba(0,0,0,0.75)",
-              borderRadius: "0 0 20px 20px",
-              transition: "height 0.07s ease",
+              background: "radial-gradient(ellipse at center, rgba(20,10,18,0.72) 0%, rgba(20,10,18,0.58) 55%, rgba(90,42,60,0.4) 100%)",
+              border: "1px solid rgba(255,190,190,0.2)",
+              borderRadius: "45% 45% 55% 55%",
+              boxShadow: "inset 0 1px 2px rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.25)",
+              opacity: speaking ? 1 : 0.45,
+              transition: "width 0.07s ease, height 0.07s ease, opacity 0.12s ease",
             }} />
           </div>
         ) : (
@@ -383,28 +541,20 @@ function LipSyncFace({ speaking, imageUrl }) {
             border: "3px solid rgba(167,139,250,0.4)",
             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
-            boxShadow: speaking ? "0 0 30px rgba(167,139,250,0.5)" : "none",
+            boxShadow: speaking ? "0 0 18px rgba(167,139,250,0.35)" : "none",
           }}>
             {/* Emoji face */}
             <div style={{ fontSize: 64 }}></div>
-
-            {/* Blink  covers eye area of emoji */}
-            {isBlinking && (
-              <div style={{
-                position: "absolute", top: "28%", left: "20%", width: "60%", height: "16%",
-                background: "rgba(30,27,75,0.8)", borderRadius: "0 0 40% 40%",
-              }} />
-            )}
 
             {/* Animated mouth on placeholder face */}
             <div style={{
               position: "absolute",
               bottom: "28%",
-              width: 32,
+              width: mouthWidth,
               height: mouthHeight,
               background: "rgba(167,139,250,0.7)",
-              borderRadius: "0 0 16px 16px",
-              transition: "height 0.07s ease",
+              borderRadius: "45% 45% 55% 55%",
+              transition: "width 0.07s ease, height 0.07s ease",
             }} />
           </div>
         )}
@@ -446,7 +596,16 @@ export default function App() {
   const [lipSyncVideoUrl, setLipSyncVideoUrl] = useState(null);
   const [lipSyncLoading, setLipSyncLoading] = useState(false);
   const [script, setScript] = useState("");
+  const [scriptSource, setScriptSource] = useState("text"); // "text" | "audio"
+  const [scriptAudioUrl, setScriptAudioUrl] = useState(null);
+  const [scriptAudioName, setScriptAudioName] = useState("");
+  const [scriptAudioError, setScriptAudioError] = useState(null);
+  const [transcribingAudio, setTranscribingAudio] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState(ACTIVE_VOICES[0]);
+  const [clonedVoices, setClonedVoices] = useState(() => loadStoredClonedVoices());
+  const [voiceUploadName, setVoiceUploadName] = useState("");
+  const [voiceUploadLoading, setVoiceUploadLoading] = useState(false);
   const [selectedEmotion, setSelectedEmotion] = useState("Neutral");
   const [selectedMusic, setSelectedMusic] = useState(MUSIC_GENRES[0]);
   const [musicVolume, setMusicVolume] = useState(30);
@@ -456,92 +615,97 @@ export default function App() {
   const [genProgress, setGenProgress] = useState(0);
   const [genStage, setGenStage] = useState("");
   const [generated, setGenerated] = useState(false);
+  const [generatedFallback, setGeneratedFallback] = useState(false);
+  const [fallbackReason, setFallbackReason] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
   const [charCount, setCharCount] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [voiceError, setVoiceError] = useState(null);
+  const [generationError, setGenerationError] = useState(null);
 
   const fileInputRef = useRef();
+  const scriptAudioInputRef = useRef();
+  const voiceFileInputRef = useRef();
+  const voiceReplaceInputRef = useRef();
+  const mediaRecorderRef = useRef(null);
+  const recordChunksRef = useRef([]);
   const audioRef = useRef(null);   // holds the currently-playing HTMLAudioElement
+  const speechUtteranceRef = useRef(null);
   const audioContextRef = useRef(null);
   const audioGraphCleanupRef = useRef(null);
 
-  //  Claude TTS engine 
-  // Calls Anthropic /v1/messages with output_audio to get natural speech.
-  // Returns a base64 PCM audio blob URL, or null on failure.
+  // Local/free TTS and rewrite state.
   const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsCache, setTtsCache] = useState({});   // key  objectURL, avoid re-fetching
   const [rewritingScript, setRewritingScript] = useState(false);
   const [rewriteError, setRewriteError] = useState(null);
+  const [rewriteProvider, setRewriteProvider] = useState(null);
 
-  //  Emotion-based script rewriter 
-  // Calls Claude text API to rewrite the current script matching the chosen emotion.
+  // Emotion-based script rewriter (free AI: Hugging Face → Ollama → Groq → offline rules).
   const handleRewriteScript = useCallback(async () => {
     if (!script.trim() || selectedEmotion === "Neutral") return;
-    if (!CLAUDE_API_KEY) {
-      setRewriteError("Add VITE_CLAUDE_API_KEY to enable rewrite");
-      setTimeout(() => setRewriteError(null), 3000);
-      return;
-    }
     setRewritingScript(true);
     setRewriteError(null);
+    setRewriteProvider(null);
     try {
-      const emotionPrompts = {
-        Happy: "rewrite it to sound joyful, upbeat, and celebratory  use warm, positive language and an energetic rhythm",
-        Serious: "rewrite it to sound authoritative, measured, and gravely sincere  use precise language and a composed, weighty tone",
-        Excited: "rewrite it to sound thrilling and enthusiastic  use exclamations, energetic phrasing, and a sense of building momentum",
-        Calm: "rewrite it to sound peaceful, soothing, and reassuring  use gentle language, smooth transitions, and a meditative flow",
-        Inspirational: "rewrite it to sound motivating and uplifting  use powerful imagery, strong calls to action, and an emotionally resonant narrative arc",
-      };
-      const instruction = emotionPrompts[selectedEmotion] || `rewrite it with a ${selectedEmotion.toLowerCase()} tone`;
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/rewrite", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": CLAUDE_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-20240620",
-          max_tokens: 600,
-          system: `You are a professional scriptwriter. The user will give you a spoken script. ${instruction}. 
-Keep the same core message and roughly the same length. 
-Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
-          messages: [{ role: "user", content: script }],
+          script,
+          emotion: selectedEmotion,
         }),
       });
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
-      const newScript = data.content?.find(b => b.type === "text")?.text?.trim();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Rewrite failed (${res.status})`);
+      }
+      const newScript = data.script?.trim();
       if (newScript) {
         setScript(newScript);
-        // Invalidate TTS cache for this script since content changed
         setTtsCache({});
+        setRewriteProvider(data.provider || null);
       } else {
-        throw new Error("Empty response");
+        throw new Error("Empty response from rewrite service");
       }
     } catch (err) {
-      setRewriteError("Rewrite failed  " + err.message);
-      setTimeout(() => setRewriteError(null), 4000);
+      const message = err.message === "fetch failed"
+        ? "Could not reach the rewrite service. Add HF_API_TOKEN (free tier) or run Ollama locally."
+        : err.message;
+      setRewriteError(`Rewrite failed: ${message}`);
+      setTimeout(() => setRewriteError(null), 6000);
     } finally {
       setRewritingScript(false);
     }
   }, [script, selectedEmotion]);
 
-  const HF_MODEL_MAP = {
-    "ljspeech": "espnet/kan-bayashi_ljspeech_vits",
-    "vctk-p225": "espnet/kan-bayashi_vctk_single_p225",
-    "vctk-p243": "espnet/kan-bayashi_vctk_single_p243",
-    "mms-en": "facebook/mms-tts-eng",
-  };
-
   const callOpenTTS = useCallback(async (text, voice) => {
-    const cacheKey = `${voice.id}::${selectedEmotion}::${voiceSmoothness}::${text.slice(0, 120)}`;
+    const cacheKey = voice.isCloned
+      ? `cloned::${voice.id}::${voice.customVoiceId || "local"}::${voice.pitch ?? 0}::${voice.speed ?? 1}::${selectedEmotion}::${text.slice(0, 120)}`
+      : `${voice.id}::${voice.provider || "huggingface"}::${selectedEmotion}::${voiceSmoothness}::${voiceSpeed}::${text.slice(0, 120)}`;
     if (ttsCache[cacheKey]) return ttsCache[cacheKey];
 
-    const payload = { text, model: voice.model || HF_MODEL_MAP[voice.id] };
+    const payload = voice.isCloned
+      ? {
+          text,
+          provider: "cloned-voice",
+          customVoiceId: voice.customVoiceId,
+          pitch: voice.pitch ?? 0,
+          speed: voice.speed ?? 1,
+          emotion: selectedEmotion,
+        }
+      : {
+          text,
+          provider: voice.provider || "fal-minimax",
+          falVoiceId: voice.falVoiceId,
+          voiceName: voice.voiceName,
+          rate: voice.rate ?? -3,
+          pitch: voice.pitch ?? 0,
+          speed: voice.speed ?? voiceSpeed,
+          emotion: selectedEmotion,
+          languageBoost: voice.languageBoost || "English",
+        };
 
     const res = await fetch("/api/tts", {
       method: "POST",
@@ -559,59 +723,61 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
 
     setTtsCache((prev) => ({ ...prev, [cacheKey]: data.audioUrl }));
     return data.audioUrl;
-  }, [ttsCache, selectedEmotion, voiceSmoothness]);
+  }, [ttsCache, selectedEmotion, voiceSmoothness, voiceSpeed]);
 
-  const createStillVideoDataUrl = useCallback(async (imgUrl) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = imgUrl;
-    await img.decode();
+  const transcribeScriptAudio = useCallback(async (audioDataUrl) => {
+    let res;
+    try {
+      res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioDataUrl: audioDataUrl || scriptAudioUrl }),
+      });
+    } catch (err) {
+      throw new Error(
+        err.message === "fetch failed"
+          ? "Could not reach the transcription service. Is the dev server running?"
+          : err.message
+      );
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Transcription failed (${res.status})`);
+    const text = data.text?.trim();
+    if (!text) throw new Error("Transcription returned empty text");
+    return text;
+  }, [scriptAudioUrl]);
 
-    const size = 720;
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas not supported");
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, size, size);
+  /** Text TTS, or transcribe audio script then re-voice with the selected voice. */
+  const resolveSpeechAudio = useCallback(async () => {
+    if (scriptSource !== "audio" || !scriptAudioUrl) {
+      return callOpenTTS(script, selectedVoice);
+    }
 
-    const scale = Math.max(size / img.width, size / img.height);
-    const w = img.width * scale;
-    const h = img.height * scale;
-    const x = (size - w) / 2;
-    const y = (size - h) / 2;
-    ctx.drawImage(img, x, y, w, h);
+    let text = script.trim();
+    if (text.length <= 10) {
+      setTranscribingAudio(true);
+      try {
+        text = await transcribeScriptAudio(scriptAudioUrl);
+        setScript(text);
+        setTtsCache({});
+      } finally {
+        setTranscribingAudio(false);
+      }
+    }
 
-    const stream = canvas.captureStream(30);
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : "video/webm";
-    const recorder = new MediaRecorder(stream, { mimeType });
-    const chunks = [];
+    if (text.length > 10) {
+      return callOpenTTS(text, selectedVoice);
+    }
 
-    const stopped = new Promise((resolve, reject) => {
-      recorder.onstop = () => resolve();
-      recorder.onerror = (e) => reject(e.error || new Error("Recorder failed"));
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-    });
-
-    recorder.start();
-    await new Promise(r => setTimeout(r, 1200));
-    recorder.stop();
-    await stopped;
-    stream.getTracks().forEach(t => t.stop());
-
-    const blob = new Blob(chunks, { type: mimeType });
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error || new Error("Video encode failed"));
-      reader.readAsDataURL(blob);
-    });
-  }, []);
+    return scriptAudioUrl;
+  }, [
+    scriptSource,
+    scriptAudioUrl,
+    script,
+    selectedVoice,
+    callOpenTTS,
+    transcribeScriptAudio,
+  ]);
 
   const runLipsync = useCallback(async (audioDataUrl) => {
     setLipSyncLoading(true);
@@ -622,7 +788,8 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
         payload.videoUrl = videoUrl.trim();
       } else {
         if (!imageUrl) throw new Error("Photo is required");
-        payload.videoDataUrl = await createStillVideoDataUrl(imageUrl);
+        payload.imageDataUrl = imageUrl;
+        payload.prompt = "Create a realistic Kling-style talking head from this portrait. Use natural facial movements, accurate lip sync, subtle head motion, eye blinks, and human expression. Keep the original face identity and avoid cartoon effects.";
       }
       const res = await fetch("/api/lipsync", {
         method: "POST",
@@ -632,13 +799,15 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Lipsync API ${res.status}`);
       setLipSyncVideoUrl(data.videoUrl);
+      setGeneratedFallback(false);
       setGenerated(true);
     } catch (err) {
       setVoiceError(err.message || "Lip sync failed.");
+      throw err;
     } finally {
       setLipSyncLoading(false);
     }
-  }, [videoUrl, imageUrl, sourceMode, createStillVideoDataUrl]);
+  }, [videoUrl, imageUrl, sourceMode]);
 
   const connectSmoothedAudio = useCallback(async (audio) => {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -694,66 +863,152 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
       audioGraphCleanupRef.current();
       audioGraphCleanupRef.current = null;
     }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      speechUtteranceRef.current = null;
+    }
     setPreviewActive(false);
     setSpeaking(false);
   }, []);
 
-  const handlePreview = useCallback(async (textOverride, voiceOverride) => {
-    // Toggle off if already speaking
-    if (previewActive) { stopAudio(); return; }
-
-    const text = textOverride || script;
-    const voice = voiceOverride || selectedVoice;
-    if (!text.trim()) return;
-    if (sourceMode === "photo" && !imageUrl) {
-      setVoiceError("Upload a photo to preview.");
-      return;
-    }
-    if (sourceMode === "video" && !videoUrl.trim()) {
-      setVoiceError("Provide a video URL to preview.");
-      return;
+  const playBrowserSpeechPreview = useCallback((text, voice) => {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      throw new Error("Browser speech preview is unavailable.");
     }
 
-    setVoiceError(null);
-    setTtsLoading(true);
-    setPreviewActive(true);
-    setSpeaking(true);
-    setLipSyncVideoUrl(null);
+    window.speechSynthesis.cancel();
 
-    try {
-      const audioUrl = await callOpenTTS(text, voice);
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-      audio.playbackRate = voiceSpeed;
-      audio.preservesPitch = true;
+    const utterance = new SpeechSynthesisUtterance(text);
+    const browserVoices = window.speechSynthesis.getVoices?.() || [];
+    const preferredVoice = browserVoices.find(v =>
+      /english|en-/i.test(`${v.lang} ${v.name}`) &&
+      (voice.gender === "female"
+        ? /jenny|aria|zira|samantha|susan|karen|female|woman/i.test(v.name)
+        : voice.gender === "male"
+          ? /guy|david|mark|daniel|alex|male|man/i.test(v.name)
+          : true)
+    ) || browserVoices.find(v => /english|en-/i.test(`${v.lang} ${v.name}`));
 
-      audioGraphCleanupRef.current = await connectSmoothedAudio(audio);
-
-      const cleanup = () => {
-        if (audioGraphCleanupRef.current) {
-          audioGraphCleanupRef.current();
-          audioGraphCleanupRef.current = null;
-        }
-        audioRef.current = null;
-        setPreviewActive(false);
-        setSpeaking(false);
-      };
-      audio.onended = cleanup;
-      audio.onerror = cleanup;
-      await audio.play();
-      runLipsync(audioUrl);
-    } catch (err) {
-      console.error("TTS error:", err);
+    if (preferredVoice) utterance.voice = preferredVoice;
+    utterance.rate = Math.max(0.5, Math.min(2, voiceSpeed));
+    utterance.pitch = voice.gender === "male" ? 0.9 : 1.05;
+    utterance.onend = () => {
+      speechUtteranceRef.current = null;
       setPreviewActive(false);
       setSpeaking(false);
-      setVoiceError(err.message || "Voice preview failed.");
-    } finally {
-      setTtsLoading(false);
+    };
+    utterance.onerror = utterance.onend;
+
+    speechUtteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  }, [voiceSpeed]);
+
+  const handlePreview = useCallback(async (textOverride, voiceOverride) => {
+  // Toggle off if already speaking
+  if (previewActive) { stopAudio(); return; }
+
+  const text = textOverride || script;
+  const voice = voiceOverride || selectedVoice;
+  if (!text.trim() && !(scriptSource === "audio" && scriptAudioUrl)) return;
+  if (sourceMode === "photo" && !imageUrl) {
+    setVoiceError("Upload a photo to preview.");
+    return;
+  }
+  if (sourceMode === "video" && !videoUrl.trim()) {
+    setVoiceError("Provide a video URL to preview.");
+    return;
+  }
+
+  // Support uploaded voice sample playback when AI clone is unavailable
+  if (voice?.isCloned && voice.audioUrl && !voice.customVoiceId) {
+    const audio = new Audio(voice.audioUrl);
+    audioRef.current = audio;
+    audio.playbackRate = voice.speed ?? voiceSpeed;
+    audio.preservesPitch = true;
+    const cleanup = () => {
+      audioRef.current = null;
+      setPreviewActive(false);
+      setSpeaking(false);
+    };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    setPreviewActive(true);
+    setSpeaking(true);
+    setVoiceError(null);
+    await audio.play();
+    return;
+  }
+
+  setVoiceError(null);
+  setTtsLoading(true);
+  setPreviewActive(true);
+  setSpeaking(true);
+  setLipSyncVideoUrl(null);
+
+  try {
+    let previewText = text.trim();
+    if (previewText.length <= 10 && scriptSource === "audio" && scriptAudioUrl) {
+      setTranscribingAudio(true);
+      try {
+        previewText = await transcribeScriptAudio(scriptAudioUrl);
+        if (!textOverride) setScript(previewText);
+      } finally {
+        setTranscribingAudio(false);
+      }
     }
-  }, [previewActive, script, selectedVoice, voiceSpeed, callOpenTTS, connectSmoothedAudio, stopAudio, runLipsync, sourceMode, imageUrl, videoUrl]);
+    const audioUrl = voiceOverride
+      ? await callOpenTTS(previewText.length > 10 ? previewText : script, voice)
+      : await resolveSpeechAudio();
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    audio.playbackRate = voiceSpeed;
+    audio.preservesPitch = true;
+
+    audioGraphCleanupRef.current = await connectSmoothedAudio(audio);
+
+    const cleanup = () => {
+      if (audioGraphCleanupRef.current) {
+        audioGraphCleanupRef.current();
+        audioGraphCleanupRef.current = null;
+      }
+      audioRef.current = null;
+      setPreviewActive(false);
+      setSpeaking(false);
+    };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    await audio.play();
+    runLipsync(audioUrl).catch(() => {});
+  } catch (err) {
+    console.error("TTS error:", err);
+    try {
+      playBrowserSpeechPreview(text, voice);
+      setVoiceError(null);
+    } catch (fallbackErr) {
+      setPreviewActive(false);
+      setSpeaking(false);
+      setVoiceError(fallbackErr.message || err.message || "Voice preview failed.");
+    }
+  } finally {
+    setTtsLoading(false);
+  }
+}, [previewActive, script, scriptSource, scriptAudioUrl, selectedVoice, voiceSpeed, callOpenTTS, resolveSpeechAudio, transcribeScriptAudio, connectSmoothedAudio, stopAudio, runLipsync, playBrowserSpeechPreview, sourceMode, imageUrl, videoUrl]);
 
   useEffect(() => { setCharCount(script.length); }, [script]);
-  useEffect(() => { setLipSyncVideoUrl(null); }, [videoUrl, imageUrl, script, selectedVoice, sourceMode]);
+  useEffect(() => { setLipSyncVideoUrl(null); }, [videoUrl, imageUrl, script, scriptAudioUrl, scriptSource, selectedVoice, sourceMode]);
+  useEffect(() => { saveStoredClonedVoices(clonedVoices); }, [clonedVoices]);
+
+  const updateClonedVoice = useCallback((id, updates) => {
+    setClonedVoices(prev => prev.map(v => (v.id === id ? { ...v, ...updates } : v)));
+    setSelectedVoice(prev => (prev.id === id ? { ...prev, ...updates } : prev));
+    setTtsCache({});
+  }, []);
+
+  const deleteClonedVoice = useCallback((id) => {
+    setClonedVoices(prev => prev.filter(v => v.id !== id));
+    setSelectedVoice(prev => (prev.id === id ? ACTIVE_VOICES[0] : prev));
+    setTtsCache({});
+  }, []);
 
   const handleImageUpload = (file) => {
     if (!file) return;
@@ -766,43 +1021,196 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
     reader.readAsDataURL(file);
   };
 
-  const handleDrop = useCallback((e) => {
-    e.preventDefault(); setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith("image/")) handleImageUpload(file);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleImageUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleVoiceUpload = (file, replaceVoiceId = null) => {
+    if (!file) return;
+    const name = voiceUploadName.trim() || file.name.replace(/\.[^.]+$/, "");
+    if (!name) {
+      setVoiceError("Enter a name for your uploaded voice.");
+      return;
+    }
+
+    setVoiceUploadLoading(true);
+    setVoiceError(null);
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      try {
+        const res = await fetch("/api/voice-clone", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            dataUrl,
+            previewText: script.trim() || "Hello, this is a preview of my uploaded voice.",
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Upload failed");
+
+        const existing = replaceVoiceId ? clonedVoices.find(v => v.id === replaceVoiceId) : null;
+        const voice = {
+          ...data,
+          id: replaceVoiceId || data.id,
+          pitch: existing?.pitch ?? 0,
+          speed: existing?.speed ?? 1,
+        };
+
+        setClonedVoices(prev => {
+          if (replaceVoiceId) return prev.map(v => (v.id === replaceVoiceId ? voice : v));
+          return [...prev, voice];
+        });
+        setSelectedVoice(voice);
+        setVoiceUploadName("");
+        if (data.cloneWarning) setVoiceError(data.cloneWarning);
+      } catch (err) {
+        console.error("Voice clone upload error:", err);
+        setVoiceError(err.message || "Voice upload failed.");
+      } finally {
+        setVoiceUploadLoading(false);
+        if (voiceFileInputRef.current) voiceFileInputRef.current.value = "";
+        if (voiceReplaceInputRef.current) voiceReplaceInputRef.current.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearScriptAudio = useCallback(() => {
+    setScriptAudioUrl(null);
+    setScriptAudioName("");
+    setScriptAudioError(null);
+    if (scriptAudioInputRef.current) scriptAudioInputRef.current.value = "";
   }, []);
+
+  const handleScriptAudioFile = useCallback((file) => {
+    if (!file) return;
+    setScriptAudioError(null);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const rawDataUrl = e.target.result;
+      setScriptAudioName(file.name);
+      setScriptSource("audio");
+      setTtsCache({});
+      setTranscribingAudio(true);
+      try {
+        const dataUrl = await prepareAudioDataUrl(file, rawDataUrl);
+        setScriptAudioUrl(dataUrl);
+        const text = await transcribeScriptAudio(dataUrl);
+        setScript(text);
+        setScriptAudioError(null);
+      } catch (err) {
+        if (rawDataUrl) setScriptAudioUrl(rawDataUrl);
+        setScriptAudioError(
+          err.message.includes("continue")
+            ? err.message
+            : `${err.message} Audio is saved — type the script below, or we'll retry when you generate.`
+        );
+      } finally {
+        setTranscribingAudio(false);
+      }
+    };
+    reader.onerror = () => setScriptAudioError("Could not read audio file.");
+    reader.readAsDataURL(file);
+  }, [transcribeScriptAudio]);
+
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    setIsRecording(false);
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    setScriptAudioError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScriptAudioError("Microphone recording is not supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop());
+        const blob = new Blob(recordChunksRef.current, { type: mimeType });
+        handleScriptAudioFile(
+          new File([blob], `recording-${Date.now()}.webm`, { type: mimeType })
+        );
+      };
+      recorder.start();
+      setIsRecording(true);
+      setScriptSource("audio");
+    } catch (err) {
+      setScriptAudioError(err.message || "Microphone access denied.");
+    }
+  }, [handleScriptAudioFile]);
 
   const handleGenerate = async () => {
     if (sourceMode === "photo" && !imageUrl) {
-      setVoiceError("Upload a photo to generate.");
+      setGenerationError("Upload a photo to generate.");
       return;
     }
     if (sourceMode === "video" && !videoUrl.trim()) {
-      setVoiceError("Provide a video URL to generate.");
+      setGenerationError("Provide a video URL to generate.");
       return;
     }
     setGenerating(true);
     setGenProgress(0);
+    setGenStage(
+      scriptSource === "audio" && scriptAudioUrl
+        ? "Transcribing and re-voicing your audio script..."
+        : "Generating speech audio..."
+    );
     setLipSyncVideoUrl(null);
+    setGeneratedFallback(false);
+    setFallbackReason("");
+    setVoiceError(null);
+    setGenerationError(null);
     try {
-      const audioUrl = await callOpenTTS(script, selectedVoice);
+      const audioUrl = await resolveSpeechAudio();
+      setGenProgress(35);
+      setGenStage(sourceMode === "photo" ? "Generating realistic face movement..." : "Running real lip sync AI...");
       await runLipsync(audioUrl);
     } catch (err) {
-      setVoiceError(err.message || "Generation failed.");
+      try {
+        setGenStage("Rendering local fallback preview...");
+        setGenProgress(55);
+        const fallbackVideoUrl = await createFallbackVideoUrl();
+        setLipSyncVideoUrl(fallbackVideoUrl);
+        setGeneratedFallback(true);
+        setFallbackReason(err.message || "Cloud AI generation was unavailable.");
+      } catch (fallbackErr) {
+        setGenerationError(fallbackErr.message || err.message || "Generation failed.");
+        setGenerating(false);
+        setGenProgress(0);
+        setGenStage("");
+        return;
+      }
     }
     const stages = [
-      { label: "Analyzing face structure...", duration: 1200 },
-      { label: "Cloning voice from model...", duration: 1500 },
-      { label: "Generating speech audio...", duration: 2000 },
-      { label: "Running lip sync AI...", duration: 2500 },
       { label: "Compositing background music...", duration: 1500 },
       { label: "Rendering final video...", duration: 2000 },
       { label: "Encoding output...", duration: 1000 },
     ];
-    let progress = 0;
+    let progress = 65;
+    setGenProgress(progress);
     for (let i = 0; i < stages.length; i++) {
       setGenStage(stages[i].label);
-      const target = Math.round(((i + 1) / stages.length) * 100);
+      const target = Math.round(65 + (((i + 1) / stages.length) * 35));
       const steps = 20;
       for (let s = 0; s <= steps; s++) {
         await new Promise(r => setTimeout(r, stages[i].duration / steps));
@@ -816,7 +1224,9 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
 
   const canProceed = [
     sourceMode === "video" ? videoUrl.trim().length > 0 : !!imageUrl,
-    script.trim().length > 10,
+    scriptSource === "audio"
+      ? !!scriptAudioUrl
+      : script.trim().length > 10,
     true,
     true,
     true,
@@ -879,8 +1289,11 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
       display: "grid", gridTemplateColumns: "280px 1fr", gap: 24, alignItems: "start",
     },
     sidebar: {
-      background: "rgba(15,23,42,0.8)", borderRadius: 22, padding: 24,
-      border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 20px 60px rgba(15,23,42,0.45)",
+      background: "rgba(15,23,42,0.8)",
+      borderRadius: 22,
+      padding: 24,
+      border: "1px solid rgba(255,255,255,0.08)",
+      boxShadow: "0 20px 60px rgba(15,23,42,0.45)",
     },
     sidebarTitle: {
       fontSize: 14, color: "#94a3b8", letterSpacing: 0.5, textTransform: "uppercase",
@@ -1107,7 +1520,123 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
   const renderScript = () => (
     <div style={styles.card}>
       <div style={styles.sectionTitle}>Write Your Script</div>
-      <div style={styles.sectionSub}>Enter the text your avatar will speak  then pick an emotion and let AI rewrite it to match</div>
+      <div style={styles.sectionSub}>
+        Type a script, or upload / record your narration — then change the voice on the next step.
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {[
+          { id: "text", label: "Type script" },
+          { id: "audio", label: "Upload / record audio" },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            style={{
+              ...styles.secondaryBtn,
+              padding: "8px 16px",
+              background: scriptSource === id ? "rgba(124,58,237,0.28)" : "rgba(255,255,255,0.04)",
+              border: scriptSource === id ? "1px solid rgba(124,58,237,0.55)" : "1px solid rgba(255,255,255,0.1)",
+              color: scriptSource === id ? "#e9d5ff" : "#94a3b8",
+            }}
+            onClick={() => {
+              setScriptSource(id);
+              if (id === "text") clearScriptAudio();
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {scriptSource === "audio" && (
+        <div style={{
+          marginBottom: 16, padding: 16, borderRadius: 14,
+          background: "rgba(96,165,250,0.06)", border: "1px solid rgba(96,165,250,0.22)",
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#93c5fd", marginBottom: 10 }}>
+            Audio script
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            <button
+              type="button"
+              style={styles.secondaryBtn}
+              onClick={() => scriptAudioInputRef.current?.click()}
+              disabled={isRecording || transcribingAudio}
+            >
+              Upload audio file
+            </button>
+            <button
+              type="button"
+              style={{
+                ...styles.secondaryBtn,
+                color: isRecording ? "#f87171" : "#e2e8f0",
+                borderColor: isRecording ? "rgba(248,113,113,0.4)" : undefined,
+              }}
+              onClick={() => (isRecording ? stopRecording() : startRecording())}
+              disabled={transcribingAudio}
+            >
+              {isRecording ? "Stop recording" : "Record voice"}
+            </button>
+            {scriptAudioUrl && (
+              <>
+                <button
+                  type="button"
+                  style={styles.secondaryBtn}
+                  disabled={transcribingAudio}
+                  onClick={async () => {
+                    setScriptAudioError(null);
+                    setTranscribingAudio(true);
+                    try {
+                      const text = await transcribeScriptAudio(scriptAudioUrl);
+                      setScript(text);
+                    } catch (err) {
+                      setScriptAudioError(err.message);
+                    } finally {
+                      setTranscribingAudio(false);
+                    }
+                  }}
+                >
+                  {transcribingAudio ? "Transcribing…" : "Transcribe again"}
+                </button>
+                <button type="button" style={styles.secondaryBtn} onClick={clearScriptAudio}>
+                  Remove audio
+                </button>
+              </>
+            )}
+          </div>
+          <input
+            ref={scriptAudioInputRef}
+            type="file"
+            accept="audio/*"
+            style={{ display: "none" }}
+            onChange={e => handleScriptAudioFile(e.target.files[0])}
+          />
+          {scriptAudioUrl && (
+            <div style={{ marginBottom: 10 }}>
+              <audio controls src={scriptAudioUrl} style={{ width: "100%", height: 40 }} />
+              {scriptAudioName && (
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{scriptAudioName}</div>
+              )}
+            </div>
+          )}
+          {transcribingAudio && (
+            <div style={{ fontSize: 12, color: "#a78bfa" }}>Transcribing audio to text…</div>
+          )}
+          {scriptAudioError && (
+            <div style={{
+              marginTop: 8, padding: "10px 12px", borderRadius: 10, fontSize: 12,
+              background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.25)",
+              color: "#fca5a5",
+            }}>
+              {scriptAudioError}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, marginTop: 8 }}>
+            On the next step, pick a voice to re-voice this recording. We transcribe your audio, then generate speech in the voice you choose.
+          </div>
+        </div>
+      )}
 
       {/* Template starters */}
       <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1129,23 +1658,31 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
         ))}
       </div>
 
-      {/* Script textarea */}
+      {/* Script textarea — editable transcript (from typing or transcription) */}
       <textarea
         style={{
           ...styles.textarea,
-          borderColor: rewritingScript ? "rgba(167,139,250,0.6)" : undefined,
-          opacity: rewritingScript ? 0.7 : 1,
+          borderColor: rewritingScript || transcribingAudio ? "rgba(167,139,250,0.6)" : undefined,
+          opacity: rewritingScript || transcribingAudio ? 0.7 : 1,
           transition: "all 0.3s",
         }}
-        placeholder="Type your script here... Use [pause] for breaks and *word* for emphasis."
-        value={rewritingScript ? " Rewriting with AI" : script}
-        onChange={e => !rewritingScript && setScript(e.target.value)}
+        placeholder={
+          scriptSource === "audio"
+            ? "Transcript appears here after upload/record — edit before choosing a new voice."
+            : "Type your script here... Use [pause] for breaks and *word* for emphasis."
+        }
+        value={rewritingScript ? " Rewriting with AI" : transcribingAudio ? " Transcribing audio…" : script}
+        onChange={e => !rewritingScript && !transcribingAudio && setScript(e.target.value)}
         maxLength={1000}
-        readOnly={rewritingScript}
+        readOnly={rewritingScript || transcribingAudio}
       />
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, color: "#64748b", fontSize: 13 }}>
         <span>{charCount}/1000 characters</span>
-        <span>~{Math.max(1, Math.round(charCount / 15))}s estimated duration</span>
+        <span>
+          {scriptSource === "audio" && scriptAudioUrl
+            ? "Audio script ready — voice changes on next step"
+            : `~${Math.max(1, Math.round(charCount / 15))}s estimated duration`}
+        </span>
       </div>
 
       {/* Error message */}
@@ -1165,7 +1702,9 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 13, color: "#a78bfa", marginBottom: 2, fontWeight: 700, letterSpacing: 0.5 }}> EMOTION TONE</div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>Select a tone, then rewrite your script with AI to match it perfectly</div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              Free AI rewrite: Hugging Face → Ollama → Groq → built-in fallback
+            </div>
           </div>
         </div>
 
@@ -1233,6 +1772,11 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
           {!script.trim() && selectedEmotion !== "Neutral" && (
             <span style={{ fontSize: 12, color: "#475569" }}> Write a script first</span>
           )}
+          {rewriteProvider && (
+            <span style={{ fontSize: 12, color: "#6ee7b7" }}>
+              Rewritten via {rewriteProvider === "rules" ? "built-in fallback" : rewriteProvider}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -1242,7 +1786,9 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
   const renderVoice = () => (
     <div style={styles.card}>
       <div style={styles.sectionTitle}>Choose Your Voice</div>
-      <div style={styles.sectionSub}>12 distinct voices across accents  Indian, Indian-American & International. Click  Test to hear each one.</div>
+      <div style={styles.sectionSub}>
+        {ACTIVE_VOICES.length} natural AI voices across accents — no robotic presets. Click Test on any voice to preview.
+      </div>
 
       {voiceError && (
         <div style={{
@@ -1281,74 +1827,15 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
             </span>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+          {/* Voice cards */}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {group.voices.map(v => {
-              const isSelected = selectedVoice.id === v.id;
+              const isActive = selectedVoice.id === v.id && !selectedVoice.isCloned;
               return (
-                <div key={v.id}
-                  style={{
-                    ...styles.voiceCard(isSelected),
-                    borderColor: isSelected ? group.color : "rgba(255,255,255,0.08)",
-                    background: isSelected ? `${group.color}18` : "rgba(255,255,255,0.03)",
-                  }}
-                  onClick={() => setSelectedVoice(v)}
-                >
-                  {/* Header row */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 5 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                      <span style={{ fontSize: 18 }}>{v.emoji}</span>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <span style={{ fontWeight: 700, fontSize: 14 }}>{v.label}</span>
-                          <span style={{ fontSize: 13 }}>{v.flag}</span>
-                        </div>
-                        <div style={{ color: "#64748b", fontSize: 10 }}>{v.accent}  {v.gender}</div>
-                      </div>
-                    </div>
-                    <span style={{
-                      ...styles.tag,
-                      background: `${group.color}22`,
-                      color: group.color,
-                      border: `1px solid ${group.color}44`,
-                      fontSize: 10,
-                    }}>{v.style}</span>
-                  </div>
-
-                  {/* Description */}
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6, fontStyle: "italic", lineHeight: 1.4 }}>
-                    {v.desc}
-                  </div>
-
-                  {/* Open-source TTS badge */}
-                  <div style={{ fontSize: 10, color: "#475569", marginBottom: isSelected ? 6 : 8, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ color: "#a78bfa" }}></span>
-                    <span>Open TTS  {v.model || "Hugging Face"}</span>
-                  </div>
-
-                  {/* Waveform when selected */}
-                  {isSelected && (
-                    <div style={{ marginBottom: 8 }}>
-                      <Waveform active={previewActive && !ttsLoading} color={group.color} />
-                    </div>
-                  )}
-
-                  {/* Test button */}
-                  <button
-                    style={{
-                      width: "100%", padding: "6px 0", fontSize: 11, fontWeight: 700,
-                      borderRadius: 8, border: `1px solid ${group.color}55`,
-                      background: `${group.color}18`, color: group.color,
-                      cursor: ttsLoading ? "wait" : "pointer", letterSpacing: 0.3,
-                      transition: "all 0.15s",
-                      opacity: ttsLoading ? 0.6 : 1,
-                    }}
-                    onClick={async e => {
-                      e.stopPropagation();
-                      stopAudio();
-                      setSelectedVoice(v);
-                      setTimeout(() => handlePreview(v.sampleText, v), 50);
-                    }}
-                  >{ttsLoading && selectedVoice.id === v.id ? " Loading" : " Test Voice"}</button>
+                <div key={v.id} style={styles.voiceCard(isActive)} onClick={() => setSelectedVoice(v)}>
+                  <div style={{ fontWeight: 600, color: isActive ? "#fff" : "#e2e8f0" }}>{v.label}</div>
+                  <div style={{ fontSize: 12, color: isActive ? "#d1d5db" : "#94a3b8" }}>{v.style}</div>
+                  <button style={{ marginTop: 6, fontSize: 12, background: "rgba(255,255,255,0.1)", border: "none", padding: "4px 8px", cursor: "pointer" }} onClick={e => { e.stopPropagation(); handlePreview(null, v); }} disabled={previewActive}>Test</button>
                 </div>
               );
             })}
@@ -1356,7 +1843,141 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
         </div>
       ))}
 
-      <div style={{ marginBottom: 28 }}>
+      {/* Uploaded / Cloned Voices */}
+      <div style={{ marginTop: 24 }}>
+        <div style={styles.sectionTitle}>Your Uploaded Voices</div>
+        <div style={styles.sectionSub}>
+          Upload a 10+ second voice sample, then adjust pitch and speed. Requires FAL_KEY for AI cloning that speaks your script.
+        </div>
+
+        <div style={{
+          display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+          marginBottom: 16, padding: 14, borderRadius: 14,
+          background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.18)",
+        }}>
+          <input
+            type="text"
+            placeholder="Voice name (e.g. My Narrator)"
+            value={voiceUploadName}
+            onChange={e => setVoiceUploadName(e.target.value)}
+            style={{
+              flex: "1 1 180px", minWidth: 180, padding: "10px 12px", borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.25)",
+              color: "#e2e8f0", fontSize: 13,
+            }}
+          />
+          <button
+            style={{
+              ...styles.secondaryBtn,
+              opacity: voiceUploadLoading ? 0.7 : 1,
+              cursor: voiceUploadLoading ? "wait" : "pointer",
+            }}
+            disabled={voiceUploadLoading}
+            onClick={() => voiceFileInputRef.current?.click()}
+          >
+            {voiceUploadLoading ? "Uploading..." : "+ Upload Voice Sample"}
+          </button>
+          <input
+            type="file"
+            accept="audio/*"
+            ref={voiceFileInputRef}
+            style={{ display: "none" }}
+            onChange={e => handleVoiceUpload(e.target.files[0])}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {clonedVoices.map(v => {
+            const isActive = selectedVoice.id === v.id && selectedVoice.isCloned;
+            return (
+              <div key={v.id} style={styles.voiceCard(isActive)} onClick={() => setSelectedVoice(v)}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: isActive ? "#fff" : "#e2e8f0" }}>{v.label}</div>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                      {v.customVoiceId ? "AI cloned" : "Sample only"}
+                    </div>
+                  </div>
+                  <button
+                    style={{ fontSize: 11, background: "transparent", border: "none", color: "#f87171", cursor: "pointer" }}
+                    onClick={e => { e.stopPropagation(); deleteClonedVoice(v.id); }}
+                    title="Delete voice"
+                  >
+                    Delete
+                  </button>
+                </div>
+                <button
+                  style={{ marginTop: 8, fontSize: 12, background: "rgba(255,255,255,0.1)", border: "none", padding: "4px 8px", cursor: "pointer" }}
+                  onClick={e => { e.stopPropagation(); handlePreview(null, v); }}
+                  disabled={previewActive || ttsLoading}
+                >
+                  Test
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {selectedVoice.isCloned && (
+          <div style={{
+            marginTop: 18, padding: 16, borderRadius: 14,
+            background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.25)",
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: "#c4b5fd" }}>
+              Modify "{selectedVoice.label}"
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 14 }}>
+              {[
+                { label: "Pitch", key: "pitch", min: -12, max: 12, step: 1, display: `${selectedVoice.pitch ?? 0}` },
+                { label: "Speed", key: "speed", min: 0.5, max: 2, step: 0.05, display: `${(selectedVoice.speed ?? 1).toFixed(2)}x` },
+              ].map(({ label, key, min, max, step, display }) => (
+                <div key={key}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>{label}</span>
+                    <span style={{ fontSize: 13, color: "#a78bfa", fontWeight: 700 }}>{display}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={selectedVoice[key] ?? (key === "speed" ? 1 : 0)}
+                    onChange={e => updateClonedVoice(selectedVoice.id, { [key]: parseFloat(e.target.value) })}
+                    style={styles.slider}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                type="text"
+                value={selectedVoice.label}
+                onChange={e => updateClonedVoice(selectedVoice.id, { label: e.target.value })}
+                style={{
+                  flex: "1 1 160px", padding: "8px 10px", borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.2)", color: "#e2e8f0",
+                }}
+              />
+              <button
+                style={styles.secondaryBtn}
+                disabled={voiceUploadLoading}
+                onClick={() => voiceReplaceInputRef.current?.click()}
+              >
+                Replace Sample
+              </button>
+              <input
+                type="file"
+                accept="audio/*"
+                ref={voiceReplaceInputRef}
+                style={{ display: "none" }}
+                onChange={e => handleVoiceUpload(e.target.files[0], selectedVoice.id)}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {GEMINI_VOICE && <div style={{ marginBottom: 28 }}>
         <div style={{
           display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
           paddingBottom: 10, borderBottom: "1px solid rgba(96,165,250,0.2)",
@@ -1446,10 +2067,10 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
             );
           })()}
         </div>
-      </div>
+      </div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 4 }}>
-        {[
+        {!selectedVoice.isCloned && [
           { label: "Playback Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}` },
         ].map(({ label, val, set, min, max, step, display }) => (
           <div key={label}>
@@ -1476,7 +2097,7 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
           {ttsLoading ? " Generating" : previewActive ? " Stop" : " Preview with Script"}
         </button>
         <span style={{ fontSize: 12, color: "#a78bfa", display: "flex", alignItems: "center", gap: 5 }}>
-          <span></span> Powered by Hugging Face open-source TTS
+          <span></span> {selectedVoice.isCloned ? "Powered by fal.ai voice cloning" : "Powered by fal.ai MiniMax natural speech"}
         </span>
       </div>
     </div>
@@ -1550,13 +2171,8 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
 
     const cx = w / 2, r = 110;
 
-    //  Natural face movement 
-    // Head bob: 3px vertical sine tied to frame index
-    const headBob = Math.sin(frameIdx * 0.08) * 3;
-    // Breathing: gentle scale 0.3%
-    const breathScale = 1 + Math.sin(frameIdx * (2 * Math.PI / 60)) * 0.003;
-    // Blink: eyes close for 4 frames out of every 72
-    const isBlinking = (frameIdx % 72) < 4;
+    const headBob = Math.sin(frameIdx * 0.08) * 0.8;
+    const breathScale = 1 + Math.sin(frameIdx * (2 * Math.PI / 80)) * 0.0015;
 
     // Apply head bob to the face center Y
     const cy = h / 2 - 30 + headBob;
@@ -1589,58 +2205,24 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
       ctx.fillText("", cx, cy);
     }
 
-    //  Blink overlay 
-    if (isBlinking) {
-      // Dark band across upper-face (eye) region
-      const eyeTop = cy - scaledR * 0.1;
-      const eyeH = scaledR * 0.25;
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.beginPath();
-      ctx.ellipse(cx, eyeTop + eyeH * 0.5, scaledR * 0.65, eyeH * 0.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    //  Lip sync mouth overlay 
-    // FIX 1: scale mouthH by 6x so it's visible on canvas (was 12px max  72px now)
-    // FIX 2: position at 62% down the face circle (was 38% = forehead area)
-    const scaledMouthH = mouthH * 6;
+    const scaledMouthH = Math.max(3, mouthH * 1.2);
     if (scaledMouthH > 0) {
-      ctx.fillStyle = "rgba(0,0,0,0.8)";
-      const mouthW = 48;
+      const mouthW = 34 + mouthH * 0.5;
       const mouthX = cx - mouthW / 2;
-      const mouthY = cy + scaledR * 0.62; // 62% down inside face = chin area
+      const mouthY = cy + scaledR * 0.48;
+      ctx.fillStyle = "rgba(20,10,18,0.66)";
       ctx.beginPath();
-      ctx.roundRect(mouthX, mouthY, mouthW, scaledMouthH, [0, 0, 14, 14]);
+      ctx.roundRect(mouthX, mouthY, mouthW, scaledMouthH, 10);
       ctx.fill();
 
-      // Lip lines for realism
-      ctx.strokeStyle = "rgba(180,100,100,0.5)";
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255,190,190,0.24)";
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(mouthX + 4, mouthY + 1);
       ctx.lineTo(mouthX + mouthW - 4, mouthY + 1);
       ctx.stroke();
     }
     ctx.restore();
-
-    //  Organic waveform 
-    // FIX: was single sin(frameIdx * 0.4 + i * 0.4)  all bars move in lockstep
-    // FIX: now per-bar phase offset + secondary frequency creates organic variance
-    const bars = 32, barW = 5, gap = 4;
-    const totalBarW = bars * (barW + gap) - gap;
-    const waveY = cy + scaledR + 32;
-    for (let i = 0; i < bars; i++) {
-      const primary = Math.abs(Math.sin(frameIdx * 0.15 + i * 0.7)) * 22;
-      const secondary = Math.abs(Math.sin(i * 2.3 + frameIdx * 0.07)) * 8;
-      const bh = Math.min(36, 6 + primary + secondary);
-      const bx = cx - totalBarW / 2 + i * (barW + gap);
-      // Gradient colour per bar: brighter in middle
-      const intensity = 0.5 + 0.5 * Math.abs(Math.sin(i * 0.2 + frameIdx * 0.1));
-      ctx.fillStyle = `rgba(167,139,250,${(0.5 + intensity * 0.4).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.roundRect(bx, waveY - bh / 2, barW, bh, 2);
-      ctx.fill();
-    }
 
     // Label bar at bottom
     ctx.fillStyle = "rgba(255,255,255,0.06)";
@@ -1650,6 +2232,57 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, cx, h - 18);
+  };
+
+  const createFallbackVideoUrl = async () => {
+    const W = 960, H = 540, FPS = 24;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas rendering is unavailable.");
+
+    let imgEl = null;
+    if (imageUrl) {
+      imgEl = await new Promise(res => {
+        const el = new Image();
+        el.onload = () => res(el);
+        el.onerror = () => res(null);
+        el.src = imageUrl;
+      });
+      if (!imgEl || imgEl.naturalWidth === 0) imgEl = null;
+    }
+
+    const stream = canvas.captureStream(FPS);
+    const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find(m => MediaRecorder.isTypeSupported(m)) || "video/webm";
+    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4_000_000 });
+    const chunks = [];
+
+    const stopped = new Promise((resolve, reject) => {
+      recorder.ondataavailable = e => { if (e.data?.size > 0) chunks.push(e.data); };
+      recorder.onerror = e => reject(e.error || new Error("Fallback video render failed."));
+      recorder.onstop = resolve;
+    });
+
+    recorder.start(100);
+
+    const MOUTH_MAP = [3, 6, 10, 14, 10, 6];
+    const FRAMES = [0, 1, 2, 3, 2, 1];
+    const durationSec = Math.max(3, Math.round(charCount / 15) + 1);
+    const totalFrames = durationSec * FPS;
+    const label = `Fallback preview - ${selectedVoice.label} - ${selectedEmotion}`;
+
+    for (let f = 0; f < totalFrames; f++) {
+      const mouthFrameIdx = Math.floor(f / 2) % FRAMES.length;
+      drawFrame(ctx, W, H, imgEl, MOUTH_MAP[FRAMES[mouthFrameIdx]], f, label);
+      if (f % 12 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+
+    recorder.stop();
+    await stopped;
+    stream.getTracks?.().forEach(t => t.stop());
+
+    const blob = new Blob(chunks, { type: mime });
+    return URL.createObjectURL(blob);
   };
 
   const handleDownloadMP4 = async () => {
@@ -1771,6 +2404,22 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
           <div style={styles.sectionTitle}>Review & Edit</div>
           <div style={styles.sectionSub}>Click any section to edit inline before generating</div>
 
+          {generationError && (
+            <div style={{
+              marginBottom: 18,
+              padding: "14px 16px",
+              borderRadius: 12,
+              background: "rgba(248,113,113,0.08)",
+              border: "1px solid rgba(248,113,113,0.22)",
+              color: "#fecaca",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}>
+              <div style={{ color: "#fca5a5", fontWeight: 800, marginBottom: 4 }}>Generation failed</div>
+              <div>{generationError}</div>
+            </div>
+          )}
+
           <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
 
             {/* Photo row */}
@@ -1824,6 +2473,35 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
                   <div style={reviewLabelStyle}>VOICE</div>
                   {editingSection === "voice" ? (
                     <div style={{ marginTop: 10 }}>
+                      {clonedVoices.length > 0 && (
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700, marginBottom: 8 }}>UPLOADED VOICES</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                            {clonedVoices.map(v => (
+                              <button key={v.id}
+                                style={{
+                                  display: "flex", alignItems: "center", gap: 6,
+                                  padding: "6px 12px", borderRadius: 10, cursor: "pointer",
+                                  border: `1px solid ${selectedVoice.id === v.id ? "#a78bfa" : "rgba(255,255,255,0.1)"}`,
+                                  background: selectedVoice.id === v.id ? "rgba(167,139,250,0.22)" : "rgba(255,255,255,0.03)",
+                                  color: selectedVoice.id === v.id ? "#e9d5ff" : "#94a3b8",
+                                  fontSize: 12, fontWeight: 600,
+                                }}
+                                onClick={() => setSelectedVoice(v)}
+                              >
+                                <span>{v.emoji || "🎙️"}</span>
+                                <span>{v.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            onChange={e => handleVoiceUpload(e.target.files[0])}
+                            style={{ fontSize: 12, color: "#94a3b8" }}
+                          />
+                        </div>
+                      )}
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
                         {ALL_VOICES.map(v => (
                           <button key={v.id}
@@ -1843,27 +2521,56 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
                           </button>
                         ))}
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        {[
-                          { label: "Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}` },
-                        ].map(({ label, val, set, min, max, step, display }) => (
-                          <div key={label}>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                              <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{label}</span>
-                              <span style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700 }}>{display}</span>
+                      {selectedVoice.isCloned ? (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                          {[
+                            { label: "Pitch", key: "pitch", min: -12, max: 12, step: 1, display: `${selectedVoice.pitch ?? 0}` },
+                            { label: "Speed", key: "speed", min: 0.5, max: 2, step: 0.05, display: `${(selectedVoice.speed ?? 1).toFixed(2)}x` },
+                          ].map(({ label, key, min, max, step, display }) => (
+                            <div key={key}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{label}</span>
+                                <span style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700 }}>{display}</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={min}
+                                max={max}
+                                step={step}
+                                value={selectedVoice[key] ?? (key === "speed" ? 1 : 0)}
+                                onChange={e => updateClonedVoice(selectedVoice.id, { [key]: parseFloat(e.target.value) })}
+                                style={styles.slider}
+                              />
                             </div>
-                            <input type="range" min={min} max={max} step={step} value={val}
-                              onChange={e => set(parseFloat(e.target.value))} style={styles.slider} />
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                          {[
+                            { label: "Speed", val: voiceSpeed, set: setVoiceSpeed, min: 0.5, max: 2, step: 0.05, display: `${voiceSpeed.toFixed(2)}` },
+                          ].map(({ label, val, set, min, max, step, display }) => (
+                            <div key={label}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{label}</span>
+                                <span style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700 }}>{display}</span>
+                              </div>
+                              <input type="range" min={min} max={max} step={step} value={val}
+                                onChange={e => set(parseFloat(e.target.value))} style={styles.slider} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ fontWeight: 600, fontSize: 14, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span>{selectedVoice.emoji}</span>
+                      <span>{selectedVoice.emoji || (selectedVoice.isCloned ? "🎙️" : "")}</span>
                       <span>{selectedVoice.label}</span>
-                      <span style={{ color: "#64748b", fontWeight: 400, fontSize: 12 }}> {selectedVoice.accent}  {voiceSpeed.toFixed(1)} speed</span>
-                      <span style={{ fontSize: 12 }}>{selectedVoice.flag}</span>
+                      <span style={{ color: "#64748b", fontWeight: 400, fontSize: 12 }}>
+                        {selectedVoice.isCloned
+                          ? ` custom  pitch ${selectedVoice.pitch ?? 0}  ${(selectedVoice.speed ?? 1).toFixed(1)}x speed`
+                          : ` ${selectedVoice.accent || ""}  ${voiceSpeed.toFixed(1)} speed`}
+                      </span>
+                      {selectedVoice.flag && <span style={{ fontSize: 12 }}>{selectedVoice.flag}</span>}
                     </div>
                   )}
                 </div>
@@ -1949,8 +2656,12 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
             </div>
           </div>
 
-          <button style={{ ...styles.primaryBtn, width: "100%", justifyContent: "center", fontSize: 16 }} onClick={handleGenerate}>
-             Generate AI Video
+          <button
+            style={{ ...styles.primaryBtn, width: "100%", justifyContent: "center", fontSize: 16 }}
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            Generate AI Video
           </button>
         </div>
       )}
@@ -1979,12 +2690,18 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
           <div style={{ ...styles.card, marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
-                <div style={{ fontSize: 20, fontWeight: 800 }}> Your Video is Ready!</div>
-                <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>AI lip sync video generated  Click play to preview</div>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>
+                  {generatedFallback ? "Fallback Preview is Ready" : "Your Video is Ready!"}
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
+                  {generatedFallback
+                    ? `${fallbackReason || "Cloud AI generation was unavailable."} A local talking-photo preview was rendered.`
+                    : "Real AI lip sync video generated  Click play to preview"}
+                </div>
               </div>
               <button style={{
                 ...styles.secondaryBtn, fontSize: 13, padding: "8px 16px",
-              }} onClick={() => { setGenerated(false); setGenerating(false); setEditingSection(null); }}>
+              }} onClick={() => { setGenerated(false); setGeneratedFallback(false); setFallbackReason(""); setGenerating(false); setEditingSection(null); }}>
                  Edit Settings
               </button>
             </div>
@@ -1997,17 +2714,31 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
               border: "1px solid rgba(255,255,255,0.1)",
             }}>
               {lipSyncVideoUrl ? (
-                <video src={lipSyncVideoUrl} controls autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <>
+                  <video src={lipSyncVideoUrl} controls autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {generatedFallback && (
+                    <div style={{
+                      position: "absolute", left: 12, bottom: 12,
+                      background: "rgba(15,23,42,0.78)", color: "#c4b5fd",
+                      border: "1px solid rgba(167,139,250,0.25)",
+                      borderRadius: 8, padding: "6px 10px", fontSize: 12,
+                      backdropFilter: "blur(8px)",
+                    }}>
+                      Local fallback preview
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #0f0a1e 0%, #1a0533 100%)" }} />
                   <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
                     <LipSyncFace speaking={speaking || lipSyncLoading} imageUrl={imageUrl} />
-                    <div style={{ marginTop: 16 }}><Waveform active={speaking || lipSyncLoading} color="#a78bfa" /></div>
                     <div style={{ marginTop: 12, color: "#64748b", fontSize: 12 }}>
                       {selectedVoice.emoji} {selectedVoice.label}  {selectedMusic.icon} {selectedMusic.label}  {selectedEmotion}
                     </div>
-                    {lipSyncLoading && <div style={{ marginTop: 8, color: "#a78bfa", fontSize: 12 }}>Sync Lipsync 2.0 Pro running</div>}
+                    <div style={{ marginTop: 8, color: "#a78bfa", fontSize: 12 }}>
+                      {lipSyncLoading ? "Real lip sync is rendering..." : "Fallback preview only. Generate a real lip sync video for realistic mouth movement."}
+                    </div>
                   </div>
                   {/* Play/Stop overlay */}
                   <button onClick={() => handlePreview()}
@@ -2108,18 +2839,20 @@ Return ONLY the rewritten script text  no preamble, no quotes, no explanation.`,
                 style={{ ...styles.secondaryBtn, flex: 1, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 onClick={() => {
                   stopAudio();
-                  setGenerated(false); setStep(0);
+                  setGenerated(false); setGeneratedFallback(false); setFallbackReason(""); setStep(0);
                   setImage(null); setImageUrl(null); setVideoUrl(""); setLipSyncVideoUrl(null);
                   setSourceMode("photo");
                   setScript("");
+                  setScriptSource("text");
+                  clearScriptAudio();
                   setSpeaking(false); setPreviewActive(false);
-                  setSelectedVoice(VOICES[0]); setVoiceSpeed(1.0);
+                  setSelectedVoice(ACTIVE_VOICES[0]); setVoiceSpeed(1.0);
                   setEditingSection(null); setTtsCache({});
                 }}
               > Start New Video</button>
               <button
                 style={{ ...styles.secondaryBtn, flex: 1, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-                onClick={() => { setGenerated(false); setGenerating(false); setEditingSection(null); }}
+                onClick={() => { setGenerated(false); setGeneratedFallback(false); setFallbackReason(""); setGenerating(false); setEditingSection(null); }}
               > Edit & Regenerate</button>
             </div>
           </div>

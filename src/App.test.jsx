@@ -6,9 +6,22 @@ import App from './App';
 globalThis.fetch = vi.fn();
 
 beforeEach(() => {
+    localStorage.clear();
     window.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     window.URL.revokeObjectURL = vi.fn();
-    window.speechSynthesis = { speak: vi.fn(), cancel: vi.fn() };
+    window.FileReader = vi.fn(function FileReaderMock() {
+        this.readAsDataURL = function (file) {
+            const isAudio = file?.type?.startsWith('audio/');
+            this.onload?.({
+                target: {
+                    result: isAudio
+                        ? 'data:audio/wav;base64,mock-audio'
+                        : 'data:image/png;base64,mock-image',
+                },
+            });
+        };
+    });
+    window.speechSynthesis = { speak: vi.fn(), cancel: vi.fn(), getVoices: vi.fn(() => []) };
     window.MediaRecorder = vi.fn().mockImplementation(() => ({
         start: vi.fn(),
         ondataavailable: vi.fn(),
@@ -44,14 +57,52 @@ beforeEach(() => {
         pause: vi.fn(),
     }));
 
-    globalThis.fetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-            content: [
-                { type: 'text', text: 'This is a mocked rewritten script!' },
-                { type: 'audio', audio_data: 'bW9jayBhdWRpbx==' },
-            ],
-        }),
+    globalThis.fetch.mockImplementation((url) => {
+        if (url.includes('/api/transcribe')) {
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({ text: 'This is transcribed audio script content for testing.' }),
+            });
+        }
+        if (url.includes('/api/rewrite')) {
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    script: 'This is a mocked rewritten script!',
+                    provider: 'huggingface',
+                }),
+            });
+        }
+        if (url.includes('/api/tts')) {
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({ audioUrl: 'blob:mock-url' }),
+            });
+        }
+        if (url.includes('/api/lipsync')) {
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({ videoUrl: 'blob:mock-url' }),
+            });
+        }
+        if (url.includes('/api/voice-clone')) {
+            return Promise.resolve({
+                ok: true,
+                json: async () => ({
+                    id: 'cloned-test',
+                    label: 'Test Voice',
+                    isCloned: true,
+                    customVoiceId: 'mock-voice-id',
+                    pitch: 0,
+                    speed: 1,
+                    audioUrl: 'data:audio/wav;base64,mock',
+                }),
+            });
+        }
+        return Promise.resolve({
+            ok: true,
+            json: async () => ({}),
+        });
     });
 });
 
@@ -70,7 +121,7 @@ describe('VoiceSync AI LipSync App - Extended Test Suite', () => {
 
         fireEvent.click(continueBtn);
 
-        expect(screen.getByText(/Upload Your Photo/i)).toBeInTheDocument();
+        expect(screen.getByText(/Choose a Source/i)).toBeInTheDocument();
     });
 
     it('requires script > 10 characters to proceed to Step 3', async () => {
@@ -80,7 +131,7 @@ describe('VoiceSync AI LipSync App - Extended Test Suite', () => {
         const file = new File(['dummy content'], 'test.png', { type: 'image/png' });
         fireEvent.change(fileInput, { target: { files: [file] } });
 
-        await waitFor(() => expect(screen.getByText(/Face Detection Ready/i)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/Photo uploaded/i)).toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', { name: /continue/i }));
 
         expect(screen.getByPlaceholderText(/Type your script here/i)).toBeInTheDocument();
@@ -105,7 +156,7 @@ describe('VoiceSync AI LipSync App - Extended Test Suite', () => {
 
         const fileInput = document.querySelector('input[type="file"]');
         fireEvent.change(fileInput, { target: { files: [new File([''], 'test.png', { type: 'image/png' })] } });
-        await waitFor(() => expect(screen.getByText(/Face Detection Ready/i)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/Photo uploaded/i)).toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', { name: /continue/i }));
 
         const scriptInput = screen.getByPlaceholderText(/Type your script here/i);
@@ -125,12 +176,43 @@ describe('VoiceSync AI LipSync App - Extended Test Suite', () => {
         expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
+    it('uploads a custom voice on the voice step', async () => {
+        render(<App />);
+
+        fireEvent.change(document.querySelector('input[type="file"]'), {
+            target: { files: [new File([''], 'avatar.png', { type: 'image/png' })] },
+        });
+        await waitFor(() => expect(screen.getByText(/Photo uploaded/i)).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+        fireEvent.change(screen.getByPlaceholderText(/Type your script here/i), {
+            target: { value: 'This script is long enough to reach the voice step.' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+        await waitFor(() => expect(screen.getByText(/Your Uploaded Voices/i)).toBeInTheDocument());
+
+        fireEvent.change(screen.getByPlaceholderText(/Voice name/i), {
+            target: { value: 'My Narrator' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /Upload Voice Sample/i }));
+
+        const audioInput = Array.from(document.querySelectorAll('input[type="file"]'))
+            .find(input => input.accept === 'audio/*');
+        fireEvent.change(audioInput, {
+            target: { files: [new File(['audio-bytes'], 'sample.wav', { type: 'audio/wav' })] },
+        });
+
+        await waitFor(() => expect(screen.getByText('Test Voice')).toBeInTheDocument());
+        expect(globalThis.fetch).toHaveBeenCalledWith('/api/voice-clone', expect.objectContaining({ method: 'POST' }));
+    });
+
     it('completes the full video generation flow', async () => {
         render(<App />);
 
         const fileInput = document.querySelector('input[type="file"]');
         fireEvent.change(fileInput, { target: { files: [new File([''], 'a.png', { type: 'image/png' })] } });
-        await waitFor(() => expect(screen.getByText(/Face Detection Ready/i)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/Photo uploaded/i)).toBeInTheDocument());
         fireEvent.click(screen.getByRole('button', { name: /continue/i }));
 
         fireEvent.change(screen.getByPlaceholderText(/Type your script here/i), { target: { value: 'This is a valid script.' } });
