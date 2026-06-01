@@ -1,6 +1,7 @@
 import JSZip from "jszip";
+import { attachDeckSlideImages } from "./deckSlideImages.js";
 
-async function loadPdfJs() {
+export async function loadPdfJs() {
   const pdfjsLib = await import("pdfjs-dist");
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
     "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -21,14 +22,31 @@ function extractXmlTexts(xml) {
   return texts;
 }
 
+function decodeXmlEntities(text) {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
 function slideFromTexts(index, texts) {
-  const cleaned = texts.map(t => t.replace(/\s+/g, " ").trim()).filter(Boolean);
-  const title = cleaned[0]?.slice(0, 80) || `Slide ${index}`;
-  const body = cleaned.slice(1).join(" ") || cleaned[0] || "";
+  const cleaned = texts
+    .map(t => decodeXmlEntities(t).replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const content = cleaned.join(" ").slice(0, 4000);
+  const title = cleaned[0]?.slice(0, 120) || `Slide ${index}`;
+  const body =
+    cleaned.length > 1
+      ? cleaned.slice(1).join(" ").slice(0, 2000)
+      : content.slice(0, 2000);
+
   return {
     index,
     title,
-    body: body.slice(0, 2000),
+    body,
+    content,
     script: "",
     audioUrl: null,
     videoUrl: null,
@@ -99,9 +117,15 @@ export async function parsePdfFile(file) {
   return { fileName: file.name, type: "pdf", slides };
 }
 
-export async function parseDeckFile(file) {
+export async function parseDeckFile(file, options = {}) {
   const name = file.name.toLowerCase();
-  if (name.endsWith(".pptx")) return parsePptxFile(file);
-  if (name.endsWith(".pdf")) return parsePdfFile(file);
-  throw new Error("Please upload a PDF or PPTX file.");
+  let deck;
+  if (name.endsWith(".pptx")) deck = await parsePptxFile(file);
+  else if (name.endsWith(".pdf")) deck = await parsePdfFile(file);
+  else throw new Error("Please upload a PDF or PPTX file.");
+
+  if (options.renderImages !== false) {
+    return attachDeckSlideImages(file, deck);
+  }
+  return deck;
 }

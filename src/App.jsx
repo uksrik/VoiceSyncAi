@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { prepareAudioDataUrl } from "./audioUtils.js";
 import { parseDeckFile } from "./deckParse.js";
+import { attachDeckSlideImages } from "./deckSlideImages.js";
+import { stitchDeckPresentationVideo } from "./deckVideo.js";
 import DeckScriptSection from "./DeckScriptSection.jsx";
 
 const MUSIC_GENRES = [
@@ -625,6 +627,7 @@ export default function App() {
   const [genStage, setGenStage] = useState("");
   const [generated, setGenerated] = useState(false);
   const [generatedFallback, setGeneratedFallback] = useState(false);
+  const [presentationVideo, setPresentationVideo] = useState(false);
   const [fallbackReason, setFallbackReason] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
@@ -643,6 +646,7 @@ export default function App() {
   const speechUtteranceRef = useRef(null);
   const audioContextRef = useRef(null);
   const audioGraphCleanupRef = useRef(null);
+  const deckFileRef = useRef(null);
 
   // Local/free TTS and rewrite state.
   const [ttsLoading, setTtsLoading] = useState(false);
@@ -1023,6 +1027,7 @@ export default function App() {
     setDeckLoading(true);
     setDeckError(null);
     try {
+      deckFileRef.current = file;
       const deck = await parseDeckFile(file);
       setDeckSlides(deck.slides);
       setDeckFileName(deck.fileName);
@@ -1277,18 +1282,26 @@ export default function App() {
   }, [handleScriptAudioFile]);
 
   const handleGenerate = async () => {
-    if (sourceMode === "photo" && !imageUrl) {
-      setGenerationError("Upload a photo to generate.");
+    const isDeck = scriptSource === "deck";
+
+    if (!isDeck) {
+      if (sourceMode === "photo" && !imageUrl) {
+        setGenerationError("Upload a photo to generate.");
+        return;
+      }
+      if (sourceMode === "video" && !videoUrl.trim()) {
+        setGenerationError("Provide a video URL to generate.");
+        return;
+      }
+    } else if (!deckSlides.length) {
+      setGenerationError("Upload a PDF or PPTX presentation on the Script step.");
       return;
     }
-    if (sourceMode === "video" && !videoUrl.trim()) {
-      setGenerationError("Provide a video URL to generate.");
-      return;
-    }
+
     setGenerating(true);
     setGenProgress(0);
     setGenStage(
-      scriptSource === "deck"
+      isDeck
         ? "Preparing slide narration audio..."
         : scriptSource === "audio" && scriptAudioUrl
           ? "Transcribing and re-voicing your audio script..."
@@ -1296,12 +1309,13 @@ export default function App() {
     );
     setLipSyncVideoUrl(null);
     setGeneratedFallback(false);
+    setPresentationVideo(false);
     setFallbackReason("");
     setVoiceError(null);
     setGenerationError(null);
+    let deckVideoDone = false;
     try {
-      let audioUrl;
-      if (scriptSource === "deck") {
+      if (isDeck) {
         let slides = deckSlides;
         const needsVoice = slides.filter(
           s => (s.script || "").trim().length > 10 && !s.audioUrl
@@ -1321,25 +1335,47 @@ export default function App() {
             }
             const url = await callOpenTTS(text, selectedVoice);
             updated.push({ ...slide, audioUrl: url });
-            setGenProgress(Math.min(30, Math.round((updated.length / slides.length) * 30)));
+            setGenProgress(Math.min(25, Math.round((updated.length / slides.length) * 25)));
           }
           setDeckSlides(updated);
           slides = updated;
         }
-        const active = slides[activeSlideIndex];
-        audioUrl = active?.audioUrl;
-        if (!audioUrl) {
-          throw new Error(
-            "No voice audio for the selected slide. Generate scripts and voices first."
-          );
+
+        if (slides.some(s => !s.imageUrl) && deckFileRef.current) {
+          setGenStage("Rendering slide images from your deck...");
+          const deckType = deckFileName.toLowerCase().endsWith(".pdf") ? "pdf" : "pptx";
+          const withImages = await attachDeckSlideImages(deckFileRef.current, {
+            type: deckType,
+            fileName: deckFileName,
+            slides,
+          });
+          slides = withImages.slides;
+          setDeckSlides(slides);
         }
+
+        setGenStage("Stitching slides with narration audio...");
+        const videoUrl = await stitchDeckPresentationVideo(slides, {
+          onProgress: p => setGenProgress(Math.min(92, Math.round(p))),
+        });
+        setLipSyncVideoUrl(videoUrl);
+        setPresentationVideo(true);
+        setGenProgress(100);
+        setGenStage("Presentation video ready");
+        deckVideoDone = true;
       } else {
-        audioUrl = await resolveSpeechAudio();
+        const audioUrl = await resolveSpeechAudio();
+        setGenProgress(35);
+        setGenStage(sourceMode === "photo" ? "Generating realistic face movement..." : "Running real lip sync AI...");
+        await runLipsync(audioUrl);
       }
-      setGenProgress(35);
-      setGenStage(sourceMode === "photo" ? "Generating realistic face movement..." : "Running real lip sync AI...");
-      await runLipsync(audioUrl);
     } catch (err) {
+      if (isDeck) {
+        setGenerationError(err.message || "Presentation video failed.");
+        setGenerating(false);
+        setGenProgress(0);
+        setGenStage("");
+        return;
+      }
       try {
         setGenStage("Rendering local fallback preview...");
         setGenProgress(55);
@@ -1355,6 +1391,13 @@ export default function App() {
         return;
       }
     }
+
+    if (deckVideoDone) {
+      setGenerating(false);
+      setGenerated(true);
+      return;
+    }
+
     const stages = [
       { label: "Compositing background music...", duration: 1500 },
       { label: "Rendering final video...", duration: 2000 },
@@ -1377,7 +1420,7 @@ export default function App() {
   };
 
   const canProceed = [
-    sourceMode === "video" ? videoUrl.trim().length > 0 : !!imageUrl,
+    deckSlides.length > 0 || (sourceMode === "video" ? videoUrl.trim().length > 0 : !!imageUrl),
     scriptSource === "audio"
       ? !!scriptAudioUrl
       : scriptSource === "deck"
@@ -2515,7 +2558,27 @@ export default function App() {
   const handleDownloadMP4 = async () => {
     if (downloading) return;
     setDownloading(true);
-    showToast("success", "Rendering video this may take a moment");
+
+    if (lipSyncVideoUrl && (presentationVideo || generatedFallback)) {
+      try {
+        const a = document.createElement("a");
+        a.href = lipSyncVideoUrl;
+        a.download = presentationVideo
+          ? `VoiceSync_Presentation_${Date.now()}.webm`
+          : `VoiceSync_${selectedVoice.label}_${Date.now()}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast("success", "Video download started");
+      } catch {
+        showToast("error", "Download failed");
+      } finally {
+        setDownloading(false);
+      }
+      return;
+    }
+
+    showToast("success", "Rendering video — this may take a moment");
 
     try {
       const W = 960, H = 540, FPS = 24;
@@ -2667,6 +2730,22 @@ export default function App() {
                   onChange={e => { handleImageUpload(e.target.files[0]); }} />
               </div>
             </div>
+
+            {scriptSource === "deck" && deckSlides.length > 0 && (
+              <div style={reviewRowStyle(false)}>
+                <div style={{ flex: 1 }}>
+                  <div style={reviewLabelStyle}>PRESENTATION</div>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginTop: 4 }}>
+                    {deckFileName || "Deck"} — {deckSlides.length} slides
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
+                    {deckSlides.filter(s => s.audioUrl).length}/{deckSlides.length} voices ready
+                    {" · "}
+                    Final step stitches slides + narration into one video
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Script row */}
             <div style={reviewRowStyle(editingSection === "script")}>
@@ -2888,7 +2967,9 @@ export default function App() {
             onClick={handleGenerate}
             disabled={generating}
           >
-            Generate AI Video
+            {scriptSource === "deck"
+              ? "Create presentation video"
+              : "Generate AI Video"}
           </button>
         </div>
       )}
@@ -2918,17 +2999,23 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 800 }}>
-                  {generatedFallback ? "Fallback Preview is Ready" : "Your Video is Ready!"}
+                  {presentationVideo
+                    ? "Your Presentation Video is Ready!"
+                    : generatedFallback
+                      ? "Fallback Preview is Ready"
+                      : "Your Video is Ready!"}
                 </div>
                 <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>
-                  {generatedFallback
-                    ? `${fallbackReason || "Cloud AI generation was unavailable."} A local talking-photo preview was rendered.`
-                    : "Real AI lip sync video generated  Click play to preview"}
+                  {presentationVideo
+                    ? `${deckSlides.length} slides stitched with generated voice narration.`
+                    : generatedFallback
+                      ? `${fallbackReason || "Cloud AI generation was unavailable."} A local talking-photo preview was rendered.`
+                      : "Real AI lip sync video generated — click play to preview"}
                 </div>
               </div>
               <button style={{
                 ...styles.secondaryBtn, fontSize: 13, padding: "8px 16px",
-              }} onClick={() => { setGenerated(false); setGeneratedFallback(false); setFallbackReason(""); setGenerating(false); setEditingSection(null); }}>
+              }} onClick={() => { setGenerated(false); setGeneratedFallback(false); setPresentationVideo(false); setFallbackReason(""); setGenerating(false); setEditingSection(null); }}>
                  Edit Settings
               </button>
             </div>
@@ -2942,7 +3029,7 @@ export default function App() {
             }}>
               {lipSyncVideoUrl ? (
                 <>
-                  <video src={lipSyncVideoUrl} controls autoPlay style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <video src={lipSyncVideoUrl} controls autoPlay style={{ width: "100%", height: "100%", objectFit: presentationVideo ? "contain" : "cover" }} />
                   {generatedFallback && (
                     <div style={{
                       position: "absolute", left: 12, bottom: 12,
