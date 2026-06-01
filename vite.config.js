@@ -6,6 +6,7 @@ import lipsyncHandler from './api/lipsync.js'
 import rewriteHandler from './api/rewrite.js'
 import voiceCloneHandler from './api/voice-clone.js'
 import transcribeHandler from './api/transcribe.js'
+import slideScriptsHandler from './api/slide-scripts.js'
 
 const localApiHandlers = {
   tts: ttsHandler,
@@ -13,6 +14,7 @@ const localApiHandlers = {
   rewrite: rewriteHandler,
   'voice-clone': voiceCloneHandler,
   transcribe: transcribeHandler,
+  'slide-scripts': slideScriptsHandler,
 };
 
 function localApiPlugin() {

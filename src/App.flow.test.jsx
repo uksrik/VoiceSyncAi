@@ -83,6 +83,21 @@ describe('current script continue flow', () => {
     expect(screen.getByText(/Choose Your Voice/i)).toBeInTheDocument();
   });
 
+  it('shows PDF/PowerPoint deck upload on the script step', async () => {
+    render(<App />);
+
+    fireEvent.change(document.querySelector('input[type="file"]'), {
+      target: { files: [new File(['mock'], 'avatar.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => expect(screen.getByText(/Photo uploaded/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+    fireEvent.click(screen.getByRole('button', { name: /PDF \/ PowerPoint/i }));
+
+    expect(screen.getByText(/Upload PDF or PPTX/i)).toBeInTheDocument();
+    expect(screen.getByText(/PDF \/ PowerPoint deck/i)).toBeInTheDocument();
+  });
+
   it('falls back to browser speech when cloud TTS preview is unavailable', async () => {
     render(<App />);
 

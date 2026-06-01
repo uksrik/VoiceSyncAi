@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { prepareAudioDataUrl } from "./audioUtils.js";
+import { parseDeckFile } from "./deckParse.js";
+import DeckScriptSection from "./DeckScriptSection.jsx";
 
 const MUSIC_GENRES = [
   { id: "cinematic", label: "Cinematic", icon: "", desc: "Epic orchestral" },
@@ -596,7 +598,14 @@ export default function App() {
   const [lipSyncVideoUrl, setLipSyncVideoUrl] = useState(null);
   const [lipSyncLoading, setLipSyncLoading] = useState(false);
   const [script, setScript] = useState("");
-  const [scriptSource, setScriptSource] = useState("text"); // "text" | "audio"
+  const [scriptSource, setScriptSource] = useState("text"); // "text" | "audio" | "deck"
+  const [deckSlides, setDeckSlides] = useState([]);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [deckFileName, setDeckFileName] = useState("");
+  const [deckLoading, setDeckLoading] = useState(false);
+  const [deckError, setDeckError] = useState(null);
+  const [generatingSlideScripts, setGeneratingSlideScripts] = useState(false);
+  const [generatingSlideVoices, setGeneratingSlideVoices] = useState(false);
   const [scriptAudioUrl, setScriptAudioUrl] = useState(null);
   const [scriptAudioName, setScriptAudioName] = useState("");
   const [scriptAudioError, setScriptAudioError] = useState(null);
@@ -995,6 +1004,105 @@ export default function App() {
 }, [previewActive, script, scriptSource, scriptAudioUrl, selectedVoice, voiceSpeed, callOpenTTS, resolveSpeechAudio, transcribeScriptAudio, connectSmoothedAudio, stopAudio, runLipsync, playBrowserSpeechPreview, sourceMode, imageUrl, videoUrl]);
 
   useEffect(() => { setCharCount(script.length); }, [script]);
+
+  useEffect(() => {
+    if (scriptSource === "deck" && deckSlides[activeSlideIndex]) {
+      setScript(deckSlides[activeSlideIndex].script || "");
+    }
+  }, [scriptSource, activeSlideIndex, deckSlides]);
+
+  const updateSlideScript = useCallback((slideIdx, text) => {
+    setDeckSlides(prev =>
+      prev.map((s, i) => (i === slideIdx ? { ...s, script: text } : s))
+    );
+    if (slideIdx === activeSlideIndex) setScript(text);
+  }, [activeSlideIndex]);
+
+  const handleDeckFile = useCallback(async (file) => {
+    if (!file) return;
+    setDeckLoading(true);
+    setDeckError(null);
+    try {
+      const deck = await parseDeckFile(file);
+      setDeckSlides(deck.slides);
+      setDeckFileName(deck.fileName);
+      setActiveSlideIndex(0);
+      setScriptSource("deck");
+      setScript(deck.slides[0]?.script || "");
+      clearScriptAudio();
+      setTtsCache({});
+    } catch (err) {
+      setDeckError(err.message || "Could not parse deck.");
+    } finally {
+      setDeckLoading(false);
+    }
+  }, []);
+
+  const generateDeckScripts = useCallback(async (onlyIndex = null) => {
+    if (!deckSlides.length) return;
+    setGeneratingSlideScripts(true);
+    setDeckError(null);
+    try {
+      const res = await fetch("/api/slide-scripts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slides: deckSlides,
+          emotion: selectedEmotion,
+          slideIndex: onlyIndex != null ? deckSlides[onlyIndex]?.index : null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Slide script generation failed");
+      const byIndex = new Map((data.slides || []).map(s => [s.index, s.script]));
+      setDeckSlides(prev =>
+        prev.map(s => ({
+          ...s,
+          script: byIndex.get(s.index) ?? s.script,
+        }))
+      );
+      if (onlyIndex != null) {
+        setScript(byIndex.get(deckSlides[onlyIndex].index) || "");
+      } else if (deckSlides[activeSlideIndex]) {
+        setScript(byIndex.get(deckSlides[activeSlideIndex].index) || deckSlides[activeSlideIndex].script || "");
+      }
+    } catch (err) {
+      setDeckError(err.message);
+    } finally {
+      setGeneratingSlideScripts(false);
+    }
+  }, [deckSlides, selectedEmotion, activeSlideIndex]);
+
+  const generateVoicesForAllSlides = useCallback(async () => {
+    if (!deckSlides.length) return;
+    setGeneratingSlideVoices(true);
+    setVoiceError(null);
+    try {
+      const updated = [];
+      for (const slide of deckSlides) {
+        const text = (slide.script || "").trim();
+        if (text.length <= 10) {
+          updated.push(slide);
+          continue;
+        }
+        const audioUrl = await callOpenTTS(text, selectedVoice);
+        updated.push({ ...slide, audioUrl });
+      }
+      setDeckSlides(updated);
+    } catch (err) {
+      setVoiceError(err.message || "Failed to generate slide voices.");
+    } finally {
+      setGeneratingSlideVoices(false);
+    }
+  }, [deckSlides, selectedVoice, callOpenTTS]);
+
+  const previewSlideVoice = useCallback(async (slideIdx) => {
+    const slide = deckSlides[slideIdx];
+    if (!slide?.script?.trim()) return;
+    setActiveSlideIndex(slideIdx);
+    setScript(slide.script);
+    await handlePreview(slide.script, selectedVoice);
+  }, [deckSlides, selectedVoice, handlePreview]);
   useEffect(() => { setLipSyncVideoUrl(null); }, [videoUrl, imageUrl, script, scriptAudioUrl, scriptSource, selectedVoice, sourceMode]);
   useEffect(() => { saveStoredClonedVoices(clonedVoices); }, [clonedVoices]);
 
@@ -1171,9 +1279,11 @@ export default function App() {
     setGenerating(true);
     setGenProgress(0);
     setGenStage(
-      scriptSource === "audio" && scriptAudioUrl
-        ? "Transcribing and re-voicing your audio script..."
-        : "Generating speech audio..."
+      scriptSource === "deck"
+        ? "Preparing slide narration audio..."
+        : scriptSource === "audio" && scriptAudioUrl
+          ? "Transcribing and re-voicing your audio script..."
+          : "Generating speech audio..."
     );
     setLipSyncVideoUrl(null);
     setGeneratedFallback(false);
@@ -1181,7 +1291,42 @@ export default function App() {
     setVoiceError(null);
     setGenerationError(null);
     try {
-      const audioUrl = await resolveSpeechAudio();
+      let audioUrl;
+      if (scriptSource === "deck") {
+        let slides = deckSlides;
+        const needsVoice = slides.filter(
+          s => (s.script || "").trim().length > 10 && !s.audioUrl
+        );
+        if (needsVoice.length) {
+          setGenStage(`Generating speech for ${needsVoice.length} slide(s)...`);
+          const updated = [];
+          for (const slide of slides) {
+            const text = (slide.script || "").trim();
+            if (text.length <= 10) {
+              updated.push(slide);
+              continue;
+            }
+            if (slide.audioUrl) {
+              updated.push(slide);
+              continue;
+            }
+            const url = await callOpenTTS(text, selectedVoice);
+            updated.push({ ...slide, audioUrl: url });
+            setGenProgress(Math.min(30, Math.round((updated.length / slides.length) * 30)));
+          }
+          setDeckSlides(updated);
+          slides = updated;
+        }
+        const active = slides[activeSlideIndex];
+        audioUrl = active?.audioUrl;
+        if (!audioUrl) {
+          throw new Error(
+            "No voice audio for the selected slide. Generate scripts and voices first."
+          );
+        }
+      } else {
+        audioUrl = await resolveSpeechAudio();
+      }
       setGenProgress(35);
       setGenStage(sourceMode === "photo" ? "Generating realistic face movement..." : "Running real lip sync AI...");
       await runLipsync(audioUrl);
@@ -1226,7 +1371,10 @@ export default function App() {
     sourceMode === "video" ? videoUrl.trim().length > 0 : !!imageUrl,
     scriptSource === "audio"
       ? !!scriptAudioUrl
-      : script.trim().length > 10,
+      : scriptSource === "deck"
+        ? deckSlides.length > 0
+          && deckSlides.every(s => (s.script || "").trim().length > 10)
+        : script.trim().length > 10,
     true,
     true,
     true,
@@ -1521,13 +1669,14 @@ export default function App() {
     <div style={styles.card}>
       <div style={styles.sectionTitle}>Write Your Script</div>
       <div style={styles.sectionSub}>
-        Type a script, or upload / record your narration — then change the voice on the next step.
+        Type a script, upload audio, or import a PDF/PPTX deck — we analyze slides and write narration for each.
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {[
           { id: "text", label: "Type script" },
           { id: "audio", label: "Upload / record audio" },
+          { id: "deck", label: "PDF / PowerPoint" },
         ].map(({ id, label }) => (
           <button
             key={id}
@@ -1542,12 +1691,33 @@ export default function App() {
             onClick={() => {
               setScriptSource(id);
               if (id === "text") clearScriptAudio();
+              if (id === "deck" && deckSlides[activeSlideIndex]) {
+                setScript(deckSlides[activeSlideIndex].script || "");
+              }
             }}
           >
             {label}
           </button>
         ))}
       </div>
+
+      {scriptSource === "deck" && (
+        <DeckScriptSection
+          styles={styles}
+          deckSlides={deckSlides}
+          activeSlideIndex={activeSlideIndex}
+          setActiveSlideIndex={setActiveSlideIndex}
+          deckFileName={deckFileName}
+          deckLoading={deckLoading}
+          deckError={deckError}
+          generatingSlideScripts={generatingSlideScripts}
+          onDeckFile={handleDeckFile}
+          onGenerateScripts={() => generateDeckScripts()}
+          onUpdateSlideScript={updateSlideScript}
+          onPreviewSlideVoice={previewSlideVoice}
+          previewLoading={ttsLoading}
+        />
+      )}
 
       {scriptSource === "audio" && (
         <div style={{
@@ -1638,6 +1808,8 @@ export default function App() {
         </div>
       )}
 
+      {scriptSource !== "deck" && (
+      <>
       {/* Template starters */}
       <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
         {["Greeting", "Product pitch", "Tutorial", "Announcement"].map(t => (
@@ -1684,6 +1856,8 @@ export default function App() {
             : `~${Math.max(1, Math.round(charCount / 15))}s estimated duration`}
         </span>
       </div>
+      </>
+      )}
 
       {/* Error message */}
       {rewriteError && (
@@ -1787,8 +1961,52 @@ export default function App() {
     <div style={styles.card}>
       <div style={styles.sectionTitle}>Choose Your Voice</div>
       <div style={styles.sectionSub}>
-        {ACTIVE_VOICES.length} natural AI voices across accents — no robotic presets. Click Test on any voice to preview.
+        {scriptSource === "deck"
+          ? `${deckSlides.length} slide(s) — pick a voice, then generate narration audio for each slide.`
+          : `${ACTIVE_VOICES.length} natural AI voices across accents — no robotic presets. Click Test on any voice to preview.`}
       </div>
+
+      {scriptSource === "deck" && deckSlides.length > 0 && (
+        <div style={{
+          marginBottom: 20, padding: 16, borderRadius: 14,
+          background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.22)",
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#6ee7b7", marginBottom: 10 }}>
+            Deck voices ({deckSlides.filter(s => s.audioUrl).length}/{deckSlides.length} ready)
+          </div>
+          <button
+            type="button"
+            style={styles.secondaryBtn}
+            disabled={generatingSlideVoices}
+            onClick={generateVoicesForAllSlides}
+          >
+            {generatingSlideVoices ? "Generating slide voices…" : "Generate voice for all slides"}
+          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            {deckSlides.map((slide, i) => (
+              <button
+                key={slide.index}
+                type="button"
+                style={{
+                  ...styles.secondaryBtn,
+                  padding: "6px 12px",
+                  fontSize: 12,
+                  borderColor: slide.audioUrl
+                    ? "rgba(16,185,129,0.45)"
+                    : "rgba(255,255,255,0.1)",
+                  color: slide.audioUrl ? "#a7f3d0" : "#94a3b8",
+                }}
+                onClick={() => {
+                  setActiveSlideIndex(i);
+                  setScript(slide.script || "");
+                }}
+              >
+                Slide {slide.index}{slide.audioUrl ? " ✓" : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {voiceError && (
         <div style={{
