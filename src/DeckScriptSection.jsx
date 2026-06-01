@@ -98,7 +98,7 @@ export default function DeckScriptSection({
             }}>
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{active.title}</div>
               <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10, lineHeight: 1.5 }}>
-                {active.body || "No on-slide text detected."}
+                {active.body || active.content || "No on-slide text detected — image-only slide or text could not be extracted."}
               </div>
               <textarea
                 style={{ ...styles.textarea, minHeight: 100 }}

@@ -10,16 +10,31 @@ export async function loadPdfJs() {
   return pdfjsLib;
 }
 
-function extractXmlTexts(xml) {
+export function extractXmlTexts(xml) {
   const texts = [];
-  const re = /<a:t[^>]*>([^<]*)<\/a:t>/g;
-  let match = re.exec(xml);
-  while (match) {
-    const t = match[1]?.trim();
-    if (t) texts.push(t);
-    match = re.exec(xml);
+  const patterns = [
+    /<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi,
+    /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/gi,
+    /<(?:\w+:)?t(?:\s[^>]*)?>([^<]+)<\/(?:\w+:)?t>/gi,
+  ];
+
+  for (const re of patterns) {
+    re.lastIndex = 0;
+    let match = re.exec(xml);
+    while (match) {
+      const t = decodeXmlEntities(match[1].replace(/\s+/g, " ")).trim();
+      if (t) texts.push(t);
+      match = re.exec(xml);
+    }
   }
-  return texts;
+
+  const seen = new Set();
+  return texts.filter(t => {
+    const key = t.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function decodeXmlEntities(text) {
@@ -36,11 +51,21 @@ function slideFromTexts(index, texts) {
     .map(t => decodeXmlEntities(t).replace(/\s+/g, " ").trim())
     .filter(Boolean);
   const content = cleaned.join(" ").slice(0, 4000);
-  const title = cleaned[0]?.slice(0, 120) || `Slide ${index}`;
-  const body =
+  let title = cleaned[0]?.slice(0, 120) || "";
+  let body =
     cleaned.length > 1
       ? cleaned.slice(1).join(" ").slice(0, 2000)
       : content.slice(0, 2000);
+
+  if (!title || /^slide\s*\d+$/i.test(title)) {
+    if (content.length > 10) {
+      const dot = content.indexOf(". ");
+      title = (dot > 8 ? content.slice(0, dot + 1) : content.slice(0, 80)).trim();
+      body = content;
+    } else {
+      title = title || `Slide ${index}`;
+    }
+  }
 
   return {
     index,
@@ -70,8 +95,15 @@ export async function parsePptxFile(file) {
   const slides = [];
   for (let i = 0; i < slidePaths.length; i++) {
     const xml = await zip.files[slidePaths[i]].async("string");
-    const texts = extractXmlTexts(xml);
+    let texts = extractXmlTexts(xml);
     const slideNum = Number(slidePaths[i].match(/slide(\d+)/i)?.[1]) || i + 1;
+
+    if (!texts.length) {
+      const layoutPath = `ppt/slideLayouts/slideLayout${slideNum}.xml`;
+      if (zip.files[layoutPath]) {
+        texts = extractXmlTexts(await zip.files[layoutPath].async("string"));
+      }
+    }
     const notesPath = `ppt/notesSlides/notesSlide${slideNum}.xml`;
     if (zip.files[notesPath]) {
       const notesXml = await zip.files[notesPath].async("string");

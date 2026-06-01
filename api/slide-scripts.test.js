@@ -141,7 +141,7 @@ describe("generateSlideScript", () => {
     });
 
     const result = await generateSlideScript(slide, "Neutral");
-    expect(result.provider).toBe("rules");
+    expect(result.provider).toBe("content");
     expect(result.script).toContain("lip-sync");
   });
 });

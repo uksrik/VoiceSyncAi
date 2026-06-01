@@ -4,6 +4,11 @@ import {
   rewriteWithRules,
 } from "./rewrite.js";
 import {
+  isPlaceholderScript,
+  narrateSlideFromContent,
+  slideReadableText,
+} from "../src/slideNarration.js";
+import {
   chatWithFal,
   chatWithGroq,
   chatWithHuggingFace,
@@ -28,19 +33,7 @@ const SYSTEM_PROMPT =
   "You write voice-over narration for presentation slides. Output only the spoken script.";
 
 export function slideSourceText(slide) {
-  const parts = [slide.content, slide.body, slide.title]
-    .map(s => (s || "").trim())
-    .filter(Boolean);
-  const seen = new Set();
-  const unique = [];
-  for (const part of parts) {
-    const key = part.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(part);
-    }
-  }
-  return unique.join("\n\n").trim();
+  return slideReadableText(slide);
 }
 
 export function buildSlideScriptPrompt(slide, emotion = "Neutral") {
@@ -122,10 +115,9 @@ function getProviderOrder() {
 }
 
 export function isGenericScript(script, slide) {
-  if (!script?.trim()) return true;
-  const s = script.trim();
-  if (/let'?s look at slide\s*\d+/i.test(s)) return true;
-  if (/^welcome\.\s*let'?s look at/i.test(s)) return true;
+  if (isPlaceholderScript(script)) return true;
+  const s = script?.trim();
+  if (!s) return true;
   if (/^moving to slide\s*\d+/i.test(s) && s.length < 160) return true;
 
   const source = slideSourceText(slide);
@@ -144,23 +136,7 @@ export function isGenericScript(script, slide) {
 }
 
 export function buildSlideScriptRules(slide, emotion = "Neutral") {
-  const source = slideSourceText(slide);
-  const title = slide.title?.trim() || `Slide ${slide.index}`;
-
-  if (!source || /^slide\s*\d+$/i.test(title)) {
-    return `This slide is titled ${title}. I'll walk you through the key point on screen.`;
-  }
-
-  let script = source;
-  if (slide.index === 1 && !/^slide\s*\d+$/i.test(title)) {
-    script = `${title}. ${source}`;
-  } else if (source.length > 20 && !source.toLowerCase().startsWith(title.toLowerCase())) {
-    script = `${title} — ${source}`;
-  }
-
-  script = script.replace(/\s+/g, " ").trim();
-  if (script.length > 420) script = `${script.slice(0, 417)}...`;
-
+  let script = narrateSlideFromContent(slide, emotion);
   if (emotion !== "Neutral") {
     script = rewriteWithRules(script, emotion);
   }
@@ -171,9 +147,11 @@ export async function generateSlideScript(slide, emotion = "Neutral") {
   const errors = [];
   const order = getProviderOrder();
 
+  const contentScript = buildSlideScriptRules(slide, emotion);
+
   for (const name of order) {
     if (name === "rules") {
-      return { script: buildSlideScriptRules(slide, emotion), provider: "rules" };
+      return { script: contentScript, provider: "content" };
     }
 
     try {
@@ -189,9 +167,9 @@ export async function generateSlideScript(slide, emotion = "Neutral") {
   }
 
   return {
-    script: buildSlideScriptRules(slide, emotion),
-    provider: "rules",
-    warning: buildAiUnavailableHint(errors),
+    script: contentScript,
+    provider: "content",
+    warning: errors.length ? buildAiUnavailableHint(errors) : undefined,
     errors,
   };
 }
@@ -226,15 +204,17 @@ export default async function handler(req, res) {
       results.push({ index: slide.index, script: script.trim() });
     }
 
-    const usedAi = [...providersUsed].some(p => p !== "rules");
+    const usedAi = [...providersUsed].some(
+      p => p !== "rules" && p !== "content"
+    );
     const primaryProvider =
       providersUsed.size === 1
         ? [...providersUsed][0]
-        : providersUsed.has("rules")
-          ? usedAi
-            ? "mixed"
-            : "rules"
-          : "ai";
+        : usedAi && providersUsed.has("content")
+          ? "mixed"
+          : usedAi
+            ? "ai"
+            : "content";
 
     return res.status(200).json({
       slides: results,

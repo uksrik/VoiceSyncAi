@@ -4,6 +4,7 @@ import { parseDeckFile } from "./deckParse.js";
 import { attachDeckSlideImages } from "./deckSlideImages.js";
 import { stitchDeckPresentationVideo } from "./deckVideo.js";
 import DeckScriptSection from "./DeckScriptSection.jsx";
+import { isPlaceholderScript, narrateSlideFromContent } from "./slideNarration.js";
 
 const MUSIC_GENRES = [
   { id: "cinematic", label: "Cinematic", icon: "", desc: "Epic orchestral" },
@@ -1029,11 +1030,15 @@ export default function App() {
     try {
       deckFileRef.current = file;
       const deck = await parseDeckFile(file);
-      setDeckSlides(deck.slides);
+      const slidesWithDrafts = deck.slides.map(s => ({
+        ...s,
+        script: narrateSlideFromContent(s, selectedEmotion),
+      }));
+      setDeckSlides(slidesWithDrafts);
       setDeckFileName(deck.fileName);
       setActiveSlideIndex(0);
       setScriptSource("deck");
-      setScript(deck.slides[0]?.script || "");
+      setScript(slidesWithDrafts[0]?.script || "");
       clearScriptAudio();
       setTtsCache({});
     } catch (err) {
@@ -1041,7 +1046,7 @@ export default function App() {
     } finally {
       setDeckLoading(false);
     }
-  }, []);
+  }, [selectedEmotion]);
 
   const generateDeckScripts = useCallback(async (onlyIndex = null) => {
     if (!deckSlides.length) return;
@@ -1060,20 +1065,21 @@ export default function App() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Slide script generation failed");
       if (data.hint) {
-        setDeckError(data.hint);
-      } else if (data.warning) {
-        setDeckError(data.warning);
-      } else if (data.provider === "rules" || data.providers?.includes("rules")) {
         setDeckError(
-          "AI narration was unavailable — scripts were built from slide text only. Add a free GROQ_API_KEY (console.groq.com) or fix your Hugging Face token permissions."
+          `${data.hint} Scripts were still built from your slide text so you can continue.`
         );
+      } else {
+        setDeckError(null);
       }
       const byIndex = new Map((data.slides || []).map(s => [s.index, s.script]));
       setDeckSlides(prev =>
-        prev.map(s => ({
-          ...s,
-          script: byIndex.get(s.index) ?? s.script,
-        }))
+        prev.map(s => {
+          const fromApi = byIndex.get(s.index) ?? s.script;
+          const script = isPlaceholderScript(fromApi)
+            ? narrateSlideFromContent(s, selectedEmotion)
+            : fromApi;
+          return { ...s, script };
+        })
       );
       if (onlyIndex != null) {
         setScript(byIndex.get(deckSlides[onlyIndex].index) || "");
