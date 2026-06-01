@@ -1054,6 +1054,15 @@ export default function App() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Slide script generation failed");
+      if (data.hint) {
+        setDeckError(data.hint);
+      } else if (data.warning) {
+        setDeckError(data.warning);
+      } else if (data.provider === "rules" || data.providers?.includes("rules")) {
+        setDeckError(
+          "AI narration was unavailable — scripts were built from slide text only. Add a free GROQ_API_KEY (console.groq.com) or fix your Hugging Face token permissions."
+        );
+      }
       const byIndex = new Map((data.slides || []).map(s => [s.index, s.script]));
       setDeckSlides(prev =>
         prev.map(s => ({

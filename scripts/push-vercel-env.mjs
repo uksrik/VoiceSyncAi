@@ -31,8 +31,14 @@ const VERCEL_KEYS = [
   "HF_API_TOKEN",
   "HUGGINGFACE_TOKEN",
   "FAL_KEY",
+  "GROQ_API_KEY",
   "HF_REWRITE_MODEL",
+  "HF_SLIDE_SCRIPT_MODEL",
+  "GROQ_REWRITE_MODEL",
+  "GROQ_SLIDE_SCRIPT_MODEL",
   "REWRITE_PROVIDER_ORDER",
+  "SLIDE_SCRIPT_PROVIDER_ORDER",
+  "FAL_SLIDE_SCRIPT_MODEL",
 ];
 
 if (parsed.HF_API_TOKEN && !parsed.HUGGINGFACE_TOKEN) {
@@ -40,7 +46,14 @@ if (parsed.HF_API_TOKEN && !parsed.HUGGINGFACE_TOKEN) {
 }
 
 if (!parsed.REWRITE_PROVIDER_ORDER) {
-  parsed.REWRITE_PROVIDER_ORDER = "huggingface,groq,rules";
+  parsed.REWRITE_PROVIDER_ORDER = "groq,fal,huggingface,rules";
+}
+
+if (!parsed.SLIDE_SCRIPT_PROVIDER_ORDER) {
+  parsed.SLIDE_SCRIPT_PROVIDER_ORDER =
+    parsed.GROQ_API_KEY
+      ? "groq,fal,huggingface,rules"
+      : "fal,groq,huggingface,rules";
 }
 
 if (!parsed.HF_REWRITE_MODEL) {

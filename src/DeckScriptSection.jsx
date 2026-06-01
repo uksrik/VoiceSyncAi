@@ -126,7 +126,8 @@ export default function DeckScriptSection({
       )}
 
       <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, marginTop: 8 }}>
-        We extract text from each slide, generate a spoken script, then create voice audio per slide on the Voice and Generate steps.
+        We extract text from each slide, then AI writes narration (Groq free tier or Hugging Face with Inference Providers permission).
+        If you see a setup warning, add GROQ_API_KEY on Vercel or update your HF token at huggingface.co/settings/tokens.
       </div>
     </div>
   );
